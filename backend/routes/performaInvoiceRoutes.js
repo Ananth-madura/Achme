@@ -8,43 +8,75 @@ router.get("/", verifyToken, (req, res) => {
   const { id: user_id, role } = req.user;
   const sql = `
     SELECT
-      p.id, p.invoice_date, p.grand_total, p.version, p.parent_id, p.status,
-      c.customer_name, c.mobile_number,
-      COALESCE(p.client_city, c.location_city) AS location_city,
-      c.email,
+      p.id, DATE_FORMAT(p.invoice_date, '%Y-%m-%d') AS invoice_date, p.grand_total, COALESCE(p.version, 1) AS version, p.parent_id, COALESCE(p.status, 'Pending') AS status, p.created_by,
+      COALESCE(c.customer_name, p.client_company, 'N/A') AS customer_name,
+      COALESCE(c.mobile_number, '') AS mobile_number,
+      COALESCE(p.client_city, c.location_city, '') AS location_city,
+      p.client_state, p.client_country,
+      COALESCE(c.email, '') AS email,
+      COALESCE(u.first_name, 'Admin') AS creator_name,
       MIN(pi.description) AS description
     FROM performainvoices p
-    JOIN customers c ON c.id = p.customer_id
+    LEFT JOIN customers c ON c.id = p.customer_id
     LEFT JOIN performainvoice_items pi ON pi.invoice_id = p.id
-    WHERE p.is_latest = 1
-    ${role === 'employee' ? 'AND p.created_by = ?' : ''}
-    GROUP BY p.id
+    LEFT JOIN users u ON u.id = p.created_by
+    WHERE (p.is_latest = 1 OR p.is_latest IS NULL)
+    ${role === 'employee' ? `AND (
+      p.created_by = ?
+      OR p.customer_id IN (
+        SELECT cust.id FROM customers cust
+        JOIN clients cl ON (
+          (cl.phone = cust.mobile_number AND cust.mobile_number IS NOT NULL AND cust.mobile_number != '')
+          OR (cl.email = cust.email AND cust.email IS NOT NULL AND cust.email != '')
+        )
+        WHERE cl.id IN (
+          SELECT client_id FROM client_shares
+          WHERE shared_to IN (SELECT id FROM teammember WHERE user_id = ?)
+        )
+      )
+    )` : ''}
+    GROUP BY p.id, u.first_name
     ORDER BY p.id DESC
   `;
-  const params = role === 'employee' ? [user_id] : [];
+  const params = role === 'employee' ? [user_id, user_id] : [];
   db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json(err);
     res.json(rows);
   });
 });
 
-// GET previous versions (history) for a given invoice id
+// GET previous versions (history) for a given invoice id — includes all versions
 router.get("/version-history/:id", verifyToken, (req, res) => {
   const { id: user_id, role } = req.user;
   const sql = `
-    SELECT p.id, p.invoice_date, p.grand_total, p.version, p.is_latest, p.parent_id,
+    SELECT p.id, DATE_FORMAT(p.invoice_date, '%Y-%m-%d') AS invoice_date,
+           DATE_FORMAT(p.created_at, '%Y-%m-%d') AS created_at,
+           p.grand_total, p.version, p.is_latest, p.parent_id,
            c.customer_name, c.mobile_number, c.email,
-           COALESCE(p.client_city, c.location_city) AS location_city
+           COALESCE(p.client_city, c.location_city) AS location_city,
+           p.client_state, p.client_country
     FROM performainvoices p
     JOIN customers c ON c.id = p.customer_id
-    WHERE p.is_latest = 0
-      AND (p.parent_id = ? OR p.id = (SELECT parent_id FROM performainvoices WHERE id = ?)
+    WHERE (p.parent_id = ? OR p.id = ? OR p.id = (SELECT parent_id FROM performainvoices WHERE id = ?)
            OR p.parent_id = (SELECT parent_id FROM performainvoices WHERE id = ? AND parent_id IS NOT NULL))
-      ${role === 'employee' ? 'AND p.created_by = ?' : ''}
-    ORDER BY p.version DESC, p.id DESC`;
+      ${role === 'employee' ? `AND (
+      p.created_by = ?
+      OR p.customer_id IN (
+        SELECT cust.id FROM customers cust
+        JOIN clients cl ON (
+          (cl.phone = cust.mobile_number AND cust.mobile_number IS NOT NULL AND cust.mobile_number != '')
+          OR (cl.email = cust.email AND cust.email IS NOT NULL AND cust.email != '')
+        )
+        WHERE cl.id IN (
+          SELECT client_id FROM client_shares
+          WHERE shared_to IN (SELECT id FROM teammember WHERE user_id = ?)
+        )
+      )
+    )` : ''}
+    ORDER BY p.version ASC, p.id ASC`;
   
-  const params = [req.params.id, req.params.id, req.params.id];
-  if (role === 'employee') params.push(user_id);
+  const params = [req.params.id, req.params.id, req.params.id, req.params.id];
+  if (role === 'employee') params.push(user_id, user_id);
 
   db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json(err);
@@ -60,7 +92,7 @@ router.get("/:id", verifyToken, (req, res) => {
   const sql = `
     SELECT 
       p.id AS performainvoice_id,
-      p.invoice_date, p.subtotal, p.total_tax, p.total_cgst, p.total_sgst, p.total_igst, p.total_discount, p.grand_total,
+      DATE_FORMAT(p.invoice_date, '%Y-%m-%d') AS invoice_date, p.subtotal, p.total_tax, p.total_cgst, p.total_sgst, p.total_igst, p.total_discount, p.grand_total,
       p.reference_no, p.from_address_id, p.from_address_custom,
       COALESCE(p.from_address_custom, fa.address) AS resolved_from_address,
       p.client_company, p.client_address1, p.client_address2, p.client_city, p.client_state, p.client_pincode, p.client_country,
@@ -70,25 +102,43 @@ router.get("/:id", verifyToken, (req, res) => {
       p.terms_payment, p.terms_payment_custom, p.terms_warranty,
       p.hsn_sac_code, p.supplier_branch,
       p.bank_details_id, p.bank_company, p.bank_name, p.bank_account, p.bank_ifsc, p.bank_branch, p.custom_terms, p.gst_mode, p.status,
-      c.customer_name, c.mobile_number, c.email, c.gst_number, c.location_city,
+      COALESCE(c.customer_name, p.client_company, '') AS customer_name,
+      COALESCE(c.mobile_number, '') AS mobile_number,
+      COALESCE(c.email, '') AS email,
+      COALESCE(c.gst_number, '') AS gst_number,
+      COALESCE(c.location_city, p.client_city, '') AS location_city,
       pi.product_number, pi.description, pi.price, pi.quantity, pi.tax, pi.discount, pi.subtotal AS item_subtotal,
       pi.brand_model, pi.uom, pi.hsn_sac
     FROM performainvoices p
-    JOIN customers c ON c.id = p.customer_id
-    JOIN performainvoice_items pi ON pi.invoice_id = p.id
+    LEFT JOIN customers c ON c.id = p.customer_id
+    LEFT JOIN performainvoice_items pi ON pi.invoice_id = p.id
     LEFT JOIN pi_from_addresses fa ON fa.id = p.from_address_id
     WHERE p.id = ?
-    ${role === 'employee' ? 'AND p.created_by = ?' : ''}
+    ${role === 'employee' ? `AND (
+      p.created_by = ?
+      OR p.customer_id IN (
+        SELECT cust.id FROM customers cust
+        JOIN clients cl ON (
+          (cl.phone = cust.mobile_number AND cust.mobile_number IS NOT NULL AND cust.mobile_number != '')
+          OR (cl.email = cust.email AND cust.email IS NOT NULL AND cust.email != '')
+        )
+        WHERE cl.id IN (
+          SELECT client_id FROM client_shares
+          WHERE shared_to IN (SELECT id FROM teammember WHERE user_id = ?)
+        )
+      )
+    )` : ''}
   `;
   const params = [req.params.id];
-  if (role === 'employee') params.push(user_id);
+  if (role === 'employee') params.push(user_id, user_id);
 
   db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json(err);
-    if (!rows.length) return res.status(404).json([]);
+    if (!rows.length || (rows.length === 1 && rows[0].product_number === null)) return res.status(404).json({ message: "Proforma Invoice not found" });
     res.json(rows);
   });
 });
+
 
 /* ================= FROM ADDRESSES API ================= */
 router.get("/from-addresses", verifyToken, (req, res) => {
@@ -123,7 +173,7 @@ const validateInvoice = ({ customer, performaInvoice, items }) => {
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    if (!item.description) return `Item ${i + 1}: Description is required`;
+    // Description is optional — allow empty
     if (item.price === "" || item.price === null) return `Item ${i + 1}: Price is required`;
     if (!item.quantity || item.quantity <= 0) return `Item ${i + 1}: Quantity must be greater than 0`;
   }
@@ -238,10 +288,13 @@ router.put("/:id", verifyToken, (req, res) => {
 
           const current = rows[0];
           const rootId = current.parent_id || id;
-          const newVersion = (current.version || 1) + 1;
+          
+          db.query(`SELECT MAX(version) AS maxVersion FROM performainvoices WHERE id=? OR parent_id=?`, [rootId, rootId], (err, maxRows) => {
+            if (err) return db.rollback(() => res.status(500).json(err));
+            const newVersion = ((maxRows[0] && maxRows[0].maxVersion) || current.version || 1) + 1;
 
-          // Mark all previous versions as not latest
-          db.query(`UPDATE performainvoices SET is_latest=0 WHERE id=? OR parent_id=?`, [rootId, rootId], err => {
+            // Mark all previous versions as not latest
+            db.query(`UPDATE performainvoices SET is_latest=0 WHERE id=? OR parent_id=?`, [rootId, rootId], err => {
             if (err) return db.rollback(() => res.status(500).json(err));
 
             // Insert new version
@@ -295,6 +348,7 @@ router.put("/:id", verifyToken, (req, res) => {
                 );
               }
             );
+          });
           });
         });
       }

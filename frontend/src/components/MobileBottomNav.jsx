@@ -1,7 +1,9 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Home, Phone, ShoppingCart, ListTodo, Grid3X3 } from "lucide-react";
+import { Home, Phone, ShoppingCart, ListTodo, Grid3X3, Wrench, Package } from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
+import { isServiceEngineer } from "../utils/serviceEngineerHelper";
 
-const navItems = [
+const defaultNavItems = [
   { icon: Home, label: "Home", path: "/dashboard" },
   { icon: Phone, label: "Leads", path: "/dashboard/telecalling" },
   { icon: ShoppingCart, label: "Sales", path: "/dashboard/proposal" },
@@ -9,9 +11,19 @@ const navItems = [
   { icon: Grid3X3, label: "More", path: null, isMenu: true },
 ];
 
+const serviceEngineerNavItems = [
+  { icon: Phone, label: "Call Report", path: "/dashboard/call-report" },
+  { icon: Package, label: "Products", path: "/dashboard/products" },
+  { icon: Grid3X3, label: "More", path: null, isMenu: true },
+];
+
 export default function MobileBottomNav({ onMenuOpen }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isEngineer = isServiceEngineer(user);
+
+  const navItems = isEngineer ? serviceEngineerNavItems : defaultNavItems;
 
   const isActive = (path) => {
     if (!path) return false;

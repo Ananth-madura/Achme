@@ -392,9 +392,6 @@ const Profile = () => {
                 <button onClick={() => { setChangeField("first_name"); setChangeValue(profile.first_name || ""); setShowChangeModal(true); }} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm flex items-center gap-2">
                   <User size={16} /> Request Name Change
                 </button>
-                <button onClick={handlePasswordChange} className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm flex items-center gap-2">
-                  <Lock size={16} /> Change Password
-                </button>
               </div>
             </div>
           )}
@@ -485,11 +482,6 @@ const Profile = () => {
                 <p className="text-sm text-gray-500">Member since</p>
                 <p className="font-medium text-gray-800">{formatDate(profile.created_at)}</p>
               </div>
-              {isAdmin && (
-                <button onClick={() => setShowPasswordModal(true)} className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 text-sm flex items-center gap-2">
-                  <Lock size={16} /> Change Password
-                </button>
-              )}
             </div>
           </div>
         </div>

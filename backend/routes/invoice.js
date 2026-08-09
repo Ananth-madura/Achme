@@ -20,13 +20,23 @@ router.post("/new", verifyToken, (req, res) => {
 router.get("/with-payments", verifyToken, (req, res) => {
   const { id: user_id, role } = req.user;
   const sql = `
-    SELECT i.id, i.client_company, i.invoice_date, i.invoice_duedate, i.project_names, i.category,
+    SELECT i.id, i.client_company, DATE_FORMAT(i.invoice_date, '%Y-%m-%d') AS invoice_date, DATE_FORMAT(i.invoice_duedate, '%Y-%m-%d') AS invoice_duedate, i.project_names, i.category,
       IFNULL(SUM(p.amount), 0) AS paid_amount
     FROM clientinvoices i
     LEFT JOIN payments p ON p.invoice_id = i.id
-    ${role === 'employee' ? 'WHERE i.created_by = ?' : ''}
+    ${role === 'employee' ? `WHERE (
+      i.created_by = ? 
+      OR i.client_company IN (
+        SELECT company_name FROM clients c
+        WHERE c.created_by = ?
+          OR c.assigned_teammember_id IN (SELECT id FROM teammember WHERE user_id = ?)
+          OR (c.original_lead_type = 'telecall' AND c.original_lead_id IN (SELECT id FROM telecalls WHERE created_by = ? OR assigned_to = ?))
+          OR (c.original_lead_type = 'walkin' AND c.original_lead_id IN (SELECT id FROM walkins WHERE created_by = ? OR assigned_to = ?))
+          OR (c.original_lead_type = 'field' AND c.original_lead_id IN (SELECT id FROM fields WHERE created_by = ? OR assigned_to = ?))
+      )
+    )` : ''}
     GROUP BY i.id ORDER BY i.id DESC`;
-  const params = role === 'employee' ? [user_id] : [];
+  const params = role === 'employee' ? [user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id] : [];
   db.query(sql, params, (err, results) => {
     if (err) { console.error(err); return res.status(500).json({ message: "Fetch failed" }); }
     res.json(results);
@@ -36,8 +46,21 @@ router.get("/with-payments", verifyToken, (req, res) => {
 // GET SINGLE INVOICE BY ID
 router.get("/:id", verifyToken, (req, res) => {
   const { id: user_id, role } = req.user;
-  db.query(`SELECT * FROM clientinvoices WHERE id = ? ${role === 'employee' ? 'AND created_by = ?' : ''}`, 
-    role === 'employee' ? [req.params.id, user_id] : [req.params.id], (err, rows) => {
+  const sql = `SELECT * FROM clientinvoices WHERE id = ? ${role === 'employee' ? `AND (
+    created_by = ? 
+    OR client_company IN (
+      SELECT company_name FROM clients c
+      WHERE c.created_by = ?
+        OR c.assigned_teammember_id IN (SELECT id FROM teammember WHERE user_id = ?)
+        OR (c.original_lead_type = 'telecall' AND c.original_lead_id IN (SELECT id FROM telecalls WHERE created_by = ? OR assigned_to = ?))
+        OR (c.original_lead_type = 'walkin' AND c.original_lead_id IN (SELECT id FROM walkins WHERE created_by = ? OR assigned_to = ?))
+        OR (c.original_lead_type = 'field' AND c.original_lead_id IN (SELECT id FROM fields WHERE created_by = ? OR assigned_to = ?))
+    )
+  )` : ''}`;
+  const params = role === 'employee' 
+    ? [req.params.id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id] 
+    : [req.params.id];
+  db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ message: "Fetch failed" });
     if (!rows.length) return res.status(404).json({ message: "Not found" });
     res.json(rows[0]);

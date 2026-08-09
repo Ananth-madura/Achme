@@ -237,12 +237,6 @@ export default function Login() {
             {/* Footer Links */}
             <div className="mt-8 pt-5 border-t border-[#ede9e4] text-center space-y-3">
               <p className="text-[14px] text-[#787671]">
-                New to the platform?{" "}
-                <Link to="/register" className="text-[#5645d4] hover:underline font-medium">
-                  Create account
-                </Link>
-              </p>
-              <p className="text-[14px] text-[#787671]">
                 Are you an administrator?{" "}
                 <Link to="/login/admin" className="text-[#5645d4] hover:underline font-medium">
                   Admin log in

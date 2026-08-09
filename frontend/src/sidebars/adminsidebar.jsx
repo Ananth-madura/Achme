@@ -8,10 +8,14 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 import { NotificationBell } from "../components/NotificationBell";
 import { API_PROXY_URL } from "../config/api";
+import { useAuth } from "../auth/AuthContext";
+import { isServiceEngineer } from "../utils/serviceEngineerHelper";
 
 
-const Sidebar = ({ onNavigate }) => {
-  const [openMenu, setOpenMenu] = useState(null);
+const Sidebar = ({ onNavigate, collapsed, onExpand }) => {
+  const { user } = useAuth();
+  const isEngineer = isServiceEngineer(user);
+  const [openMenu, setOpenMenu] = useState(isEngineer ? 0 : null);
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -38,7 +42,7 @@ const Sidebar = ({ onNavigate }) => {
     };
   }, []);
 
-  const menu = [
+  const fullMenu = [
     { icon: <Home size={20} />, title: "Dashboard", path: "/dashboard" },
     { icon: <Bell size={20} />, title: "Notifications", path: "/dashboard/notifications", badge: pendingCount },
     // { icon: <TargetIcon size={20} />, title: "Team Targets", path: "/dashboard/targets" },
@@ -80,10 +84,30 @@ const Sidebar = ({ onNavigate }) => {
     // { icon: <Settings size={20} />, title: "Settings", path: "/dashboard/settings" }
   ];
 
-  const toggleMenu = (i) => setOpenMenu(openMenu === i ? null : i);
+  const serviceEngineerMenu = [
+    {
+      icon: <Wrench size={20} />,
+      title: "Services",
+      subitems: [
+        { label: "Products", path: "/dashboard/products" },
+        { label: "Call Report", path: "/dashboard/call-report" }
+      ]
+    }
+  ];
+
+  const menu = isEngineer ? serviceEngineerMenu : fullMenu;
+
+  const handleMenuClick = (i) => {
+    if (collapsed) {
+      if (onExpand) onExpand();
+      setOpenMenu(i);
+    } else {
+      setOpenMenu(openMenu === i ? null : i);
+    }
+  };
 
   return (
-    <aside className="side-mainbar bg-canvas">
+    <aside className={`side-mainbar bg-canvas ${collapsed ? "px-1" : "pl-[10px]"}`}>
       <ul className="space-y-1">
         {menu.map((item, i) => (
           <li key={i}>
@@ -93,26 +117,42 @@ const Sidebar = ({ onNavigate }) => {
               <Link
                 to={item.path}
                 onClick={onNavigate}
-                className="sidebar-item"
+                className={`sidebar-item flex items-center ${collapsed ? "justify-center px-1" : "gap-3 px-3"} py-2 rounded-lg transition-all duration-200 text-ink`}
+                title={collapsed ? item.title : ""}
               >
-                <div className="flex items-center gap-3 text-ink">
+                <div className="relative flex items-center justify-center">
                   {item.icon}
-                  <span className="text-sm font-medium">{item.title}</span>
+                  {collapsed && item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+                  )}
                 </div>
+                {!collapsed && (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-sm font-medium">{item.title}</span>
+                    {item.badge > 0 && (
+                      <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                )}
               </Link>
             ) : (
               <>
                 {/* MAIN ITEM → With sub menu (Projects, Sales, etc.) */}
                 <button
-                  onClick={() => toggleMenu(i)}
-                  className="w-full flex items-center justify-between px-3 py-2 text-ink hover:text-primary"
+                  onClick={() => handleMenuClick(i)}
+                  className={`w-full flex items-center ${collapsed ? "justify-center px-1" : "justify-between px-3"} py-2 text-ink hover:text-primary transition-all duration-200`}
+                  title={collapsed ? item.title : ""}
                 >
-                  <div className="flex items-center gap-3 text-ink">
-                    {item.icon}
-                    <span className="text-sm font-medium">{item.title}</span>
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex items-center justify-center">
+                      {item.icon}
+                    </div>
+                    {!collapsed && <span className="text-sm font-medium">{item.title}</span>}
                   </div>
 
-                  {item.subitems && (
+                  {!collapsed && item.subitems && (
                     <ChevronDown
                       size={18}
                       className={`${openMenu === i ? "rotate-180" : ""} transition text-slate`}
@@ -121,7 +161,7 @@ const Sidebar = ({ onNavigate }) => {
                 </button>
 
                 {/* SUBMENU */}
-                {openMenu === i && item.subitems && (
+                {!collapsed && openMenu === i && item.subitems && (
                   <ul className="ml-9 mt-1 space-y-1">
                     {item.subitems.map((s, j) => (
                       <li key={j}>

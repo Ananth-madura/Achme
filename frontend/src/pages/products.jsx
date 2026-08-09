@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { getToday } from "../utils/leadutil";
 import axios from "axios";
 import { X, Search, Plus, Eye, ChevronLeft, ChevronRight, Edit, Trash2, Mail } from "lucide-react";
 import ClientSearchDropdown from "../components/ClientSearchDropdown";
@@ -21,9 +22,10 @@ function Products() {
   const [material, setMaterial] = useState("");
   const [warranty, setWarranty] = useState("");
   const [amc, setAmc] = useState(false);
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(getToday());
   const [issues, setIssues] = useState("");
   const [engineerName, setEngineerName] = useState("");
+  const [teamMembers, setTeamMembers] = useState([]);
 
 
   const [images, setImages] = useState([]);
@@ -52,18 +54,50 @@ function Products() {
   };
 
   // 🔥 FETCH SERVICES
-  const fetchServices = async () => {
+  const fetchServices = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/services`, getAuthConfig());
       setServices(res.data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }, [API]);
+
+  // 👥 FETCH TEAM MEMBERS
+  const fetchTeamMembers = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/teammember`, getAuthConfig());
+      setTeamMembers(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [API]);
 
   useEffect(() => {
     fetchServices();
-  }, [fetchServices]);
+    fetchTeamMembers();
+  }, [fetchServices, fetchTeamMembers]);
+
+  const getEngineersList = () => {
+    const staticList = [
+      "Thanapalan AC017", "Rajesh AC080", "Kandhavel AC086", "Gopi AC078",
+      "Saran raj AC087", "Bharani AC105", "Damodaran AC085", "Suresh AC073",
+      "Ranjith AC054", "Sivakumar AC036", "Manikandaraja AC097", "Malar vannan AC016",
+      "Faiz al AC068"
+    ];
+    const dynamicList = teamMembers
+      .filter(t => (t.emp_role || "").toLowerCase() === "engineer")
+      .map(t => `${t.first_name} ${t.last_name || ""}`.trim());
+      
+    // Combine uniquely (ignoring case)
+    const combined = [...staticList];
+    dynamicList.forEach(name => {
+      if (!combined.some(c => c.toLowerCase() === name.toLowerCase())) {
+        combined.push(name);
+      }
+    });
+    return combined.sort((a, b) => a.localeCompare(b));
+  };
 
   // 🔍 CLIENT SEARCH
 
@@ -142,7 +176,7 @@ function Products() {
     setMaterial("");
     setWarranty("");
     setAmc(false);
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(getToday());
     setIssues("");
     setEngineerName("");
     setImages([]);
@@ -185,21 +219,57 @@ function Products() {
     }
   };
 
-  const openCarousel = (imgs) => {
-    if (imgs && imgs.length > 0) {
-      let imageList = imgs;
-      if (typeof imgs === "string") {
-        try {
-          imageList = JSON.parse(imgs);
-        } catch (e) {
-          imageList = [imgs];
+  const parseImageArray = (imgs) => {
+    if (!imgs) return [];
+    if (Array.isArray(imgs)) return imgs.filter(Boolean);
+    if (typeof imgs === "string") {
+      const trimmed = imgs.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
+        if (typeof parsed === "string" && parsed.trim()) return [parsed.trim()];
+      } catch (e) {
+        if (trimmed.includes(",")) {
+          return trimmed.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
         }
+        return [trimmed.replace(/^["']|["']$/g, "")];
       }
+    }
+    return [];
+  };
+
+  const getImageUrl = (imgPath) => {
+    if (!imgPath) return "";
+    if (typeof imgPath !== "string") return "";
+
+    let str = imgPath.trim().replace(/^["']|["']$/g, "");
+    if (!str) return "";
+
+    // If it's already a full http/https URL
+    if (str.startsWith("http://") || str.startsWith("https://")) {
+      const match = str.match(/\/uploads\/(.+)$/i);
+      if (match) return `${BASE_API}/uploads/${match[1]}`;
+      return str;
+    }
+
+    // Strip leading slashes/backslashes and "uploads/" prefix
+    let clean = str.replace(/^[/\\]+/, "");
+    if (/^uploads[/\\]/i.test(clean)) {
+      clean = clean.replace(/^uploads[/\\]+/i, "");
+    }
+    return `${BASE_API}/uploads/${clean}`;
+  };
+
+  const openCarousel = (imgs) => {
+    const imageList = parseImageArray(imgs);
+    if (imageList.length > 0) {
       setCurrentImages(imageList);
       setCurrentIndex(0);
       setCarouselOpen(true);
     }
   };
+
 
   const nextImage = () => {
     setCurrentIndex((prev) => (prev + 1) % currentImages.length);
@@ -284,13 +354,37 @@ function Products() {
                 </td>
                 <td className="p-4">{s.date?.split("T")[0]}</td>
                 <td className="p-4 text-center">
-                  <button
-                    onClick={() => openCarousel(s.images)}
-                    className="bg-blue-50 text-blue-600 p-2 rounded-lg hover:bg-blue-100 transition-colors"
-                    title="View Images"
-                  >
-                    <Eye size={18} />
-                  </button>
+                  {(() => {
+                    const imgList = parseImageArray(s.images);
+                    if (imgList.length === 0) {
+                      return <span className="text-xs text-gray-400 font-medium">No image</span>;
+                    }
+                    const firstImgUrl = getImageUrl(imgList[0]);
+                    return (
+                      <div 
+                        onClick={() => openCarousel(s.images)} 
+                        className="inline-flex items-center justify-center gap-1 cursor-pointer group"
+                        title="Click to view image gallery"
+                      >
+                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 bg-gray-100 relative group-hover:scale-105 transition-transform shadow-sm flex items-center justify-center">
+                          <img 
+                            src={firstImgUrl} 
+                            alt={s.material || "Product"} 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.style.display = "none";
+                            }}
+                          />
+                          {imgList.length > 1 && (
+                            <span className="absolute bottom-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-1 rounded-tl">
+                              +{imgList.length - 1}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </td>
                 <td className="p-4 text-center">
                   <div className="flex justify-center gap-3">
@@ -327,8 +421,8 @@ function Products() {
       </div>
 
       {/* MODAL FORM */}
-      <div className={`overlay ${showModal ? "show" : ""} justify-items-center`}>
-        <div className={`${showModal ? "show" : ""} task-application bg-white shadow-2xl p-9 rounded-xl w-[60%] z-50 mt-10 max-h-[90vh] overflow-y-auto`}>
+      <div className={`overlay ${showModal ? "show" : ""} flex justify-center items-start overflow-y-auto p-4 md:p-10 z-50`}>
+        <div className={`${showModal ? "show" : ""} task-application bg-white shadow-2xl p-6 md:p-9 rounded-xl w-full max-w-4xl z-50 my-8 overflow-y-auto`}>
           <div className="flex justify-between items-center mb-8">
             <h2 className="text-2xl font-semibold text-gray-700">{isEdit ? "Edit Product" : "Add New Product"}</h2>
             <span className="x-icon cursor-pointer" onClick={() => setShowModal(false)}><X size={24} /></span>
@@ -408,13 +502,18 @@ function Products() {
 
             <div className="flex items-center gap-6">
               <label className="w-40 text-lg">Engineer Name</label>
-              <input
-                type="text"
+              <select
                 value={engineerName}
                 onChange={(e) => setEngineerName(e.target.value)}
-                className="form-control w-[60%] border rounded-lg p-2"
-                placeholder="Enter engineer's name"
-              />
+                className="form-control w-[60%] border rounded-lg p-2 bg-white outline-none"
+              >
+                <option value="">— Select Engineer —</option>
+                {getEngineersList().map((eng) => (
+                  <option key={eng} value={eng}>
+                    {eng}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex items-center gap-6">
@@ -502,9 +601,12 @@ function Products() {
 
               <div className="w-full h-full flex items-center justify-center">
                 <img
-                  src={`${BASE_API}/uploads/${currentImages[currentIndex]}`}
-                  className="max-w-full max-h-full object-contain shadow-2xl"
+                  src={getImageUrl(currentImages[currentIndex])}
+                  className="max-w-full max-h-full object-contain shadow-2xl rounded-lg"
                   alt={`Product img ${currentIndex + 1}`}
+                  onError={(e) => {
+                    console.error("Image load error:", e.target.src);
+                  }}
                 />
               </div>
 

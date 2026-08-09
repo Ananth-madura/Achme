@@ -3,34 +3,40 @@ const router = express.Router();
 const db = require("../config/database");
 const { verifyToken } = require("../middleware/authMiddleware");
 
+const formatDateLocal = (d) => {
+  return d.getFullYear() + '-' +
+         String(d.getMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getDate()).padStart(2, '0');
+};
+
 // Helper to handle date ranges
 const getDateRange = (filter, from, to) => {
   let startDate, endDate;
   const now = new Date();
-  
+
   if (from && to) {
     startDate = from;
     endDate = to;
   } else {
-    endDate = now.toISOString().split('T')[0];
+    endDate = formatDateLocal(now);
     const d = new Date();
     if (filter === "day") {
       startDate = endDate;
     } else if (filter === "week") {
       // Last 7 days
       d.setDate(d.getDate() - 6);
-      startDate = d.toISOString().split('T')[0];
+      startDate = formatDateLocal(d);
     } else if (filter === "month") {
       d.setDate(1);
-      startDate = d.toISOString().split('T')[0];
+      startDate = formatDateLocal(d);
     } else if (filter === "year") {
       d.setMonth(0);
       d.setDate(1);
-      startDate = d.toISOString().split('T')[0];
+      startDate = formatDateLocal(d);
     } else {
       // Default to month
       d.setDate(1);
-      startDate = d.toISOString().split('T')[0];
+      startDate = formatDateLocal(d);
     }
   }
   return { startDate, endDate };
@@ -41,43 +47,52 @@ router.get("/overview", verifyToken, async (req, res) => {
   const { filter, from, to } = req.query;
   const { startDate, endDate } = getDateRange(filter, from, to);
   const userId = req.user.id;
-  const isAdmin = req.user.role === 'admin';
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'subadmin';
 
   const userFilter = isAdmin ? "" : ` AND created_by = ${userId}`;
   const userFilterLeads = isAdmin ? "" : ` AND (created_by = ${userId} OR assigned_to = ${userId})`;
 
   const { customer } = req.query;
-  const customerFilter = customer ? ` AND customer_name LIKE '%${customer}%'` : "";
+  const customerFilter = customer ? ` AND (customer_name LIKE '%${customer}%' OR company_name LIKE '%${customer}%')` : "";
 
   try {
     const queries = {
-      sales: `SELECT SUM(grand_total) as total FROM performainvoices WHERE invoice_date BETWEEN ? AND ? ${userFilter} ${customer ? ` AND client_company LIKE '%${customer}%'` : ""}`,
+      sales: `SELECT 
+        (SELECT COALESCE(SUM(grand_total), 0) FROM performainvoices WHERE (DATE(invoice_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilter} ${customer ? ` AND client_company LIKE '%${customer}%'` : ""}) +
+        (SELECT COALESCE(SUM(grand_total), 0) FROM quotations WHERE (LOWER(status) IN ('closed', 'billed', 'approved', 'send', 'sent')) AND (DATE(quotation_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilter} ${customer ? ` AND client_company LIKE '%${customer}%'` : ""}) +
+        (SELECT COALESCE(SUM(amount_value), 0) FROM contracts WHERE (DATE(created_at) BETWEEN ? AND ?) ${userFilter} ${customer ? ` AND client_company LIKE '%${customer}%'` : ""}) as total`,
       leads: `
         SELECT 
-          (SELECT COUNT(*) FROM telecalls WHERE call_date BETWEEN ? AND ? ${userFilterLeads} ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}) as telecalls,
-          (SELECT COUNT(*) FROM walkins WHERE walkin_date BETWEEN ? AND ? ${userFilterLeads} ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}) as walkins,
-          (SELECT COUNT(*) FROM fields WHERE visit_date BETWEEN ? AND ? ${userFilterLeads} ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}) as fields,
-          (SELECT COUNT(*) FROM telecalls WHERE call_date BETWEEN ? AND ? ${userFilterLeads} AND call_outcome = 'Converted' ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}) as tc_conv,
-          (SELECT COUNT(*) FROM walkins WHERE walkin_date BETWEEN ? AND ? ${userFilterLeads} AND walkin_status = 'Converted' ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}) as wk_conv,
-          (SELECT COUNT(*) FROM fields WHERE visit_date BETWEEN ? AND ? ${userFilterLeads} AND field_outcome = 'Converted' ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}) as fld_conv
+          (SELECT COUNT(*) FROM telecalls WHERE (DATE(call_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilterLeads} ${customer ? ` AND (customer_name LIKE '%${customer}%' OR company_name LIKE '%${customer}%')` : ""}) as telecalls,
+          (SELECT COUNT(*) FROM walkins WHERE (DATE(walkin_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilterLeads} ${customer ? ` AND (customer_name LIKE '%${customer}%' OR company_name LIKE '%${customer}%')` : ""}) as walkins,
+          (SELECT COUNT(*) FROM fields WHERE (DATE(visit_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilterLeads} ${customer ? ` AND (customer_name LIKE '%${customer}%' OR company_name LIKE '%${customer}%')` : ""}) as fields,
+          (SELECT COUNT(*) FROM telecalls WHERE (DATE(call_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilterLeads} AND LOWER(call_outcome) IN ('converted','closed','billed') ${customer ? ` AND (customer_name LIKE '%${customer}%' OR company_name LIKE '%${customer}%')` : ""}) as tc_conv,
+          (SELECT COUNT(*) FROM walkins WHERE (DATE(walkin_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilterLeads} AND LOWER(walkin_status) IN ('converted','closed','billed') ${customer ? ` AND (customer_name LIKE '%${customer}%' OR company_name LIKE '%${customer}%')` : ""}) as wk_conv,
+          (SELECT COUNT(*) FROM fields WHERE (DATE(visit_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${userFilterLeads} AND LOWER(field_outcome) IN ('converted','closed','billed') ${customer ? ` AND (customer_name LIKE '%${customer}%' OR company_name LIKE '%${customer}%')` : ""}) as fld_conv
       `,
-      services: `SELECT COUNT(*) as count, SUM(total_expenses) as revenue FROM amc_alc_services WHERE service_date BETWEEN ? AND ? ${isAdmin ? "" : " AND (service_person_id = " + userId + " OR created_by = " + userId + ")"} ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}`
+      services: `SELECT COUNT(*) as count, COALESCE(SUM(total_expenses), 0) as revenue FROM amc_alc_services WHERE (DATE(service_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) ${isAdmin ? "" : " AND (service_person_id = " + userId + " OR created_by = " + userId + ")"} ${customer ? ` AND customer_name LIKE '%${customer}%'` : ""}`
     };
-
-    const [salesResult] = await db.promise().query(queries.sales, [startDate, endDate]);
-    const [leadsResult] = await db.promise().query(queries.leads, [startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate]);
-    const [servicesResult] = await db.promise().query(queries.services, [startDate, endDate]);
+    const [salesResult] = await db.promise().query(queries.sales, [startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate, startDate, endDate]);
+    const [leadsResult] = await db.promise().query(queries.leads, [
+      startDate, endDate, startDate, endDate,
+      startDate, endDate, startDate, endDate,
+      startDate, endDate, startDate, endDate,
+      startDate, endDate, startDate, endDate,
+      startDate, endDate, startDate, endDate,
+      startDate, endDate, startDate, endDate
+    ]);
+    const [servicesResult] = await db.promise().query(queries.services, [startDate, endDate, startDate, endDate]);
 
     const leads = leadsResult[0];
-    const totalLeads = leads.telecalls + leads.walkins + leads.fields;
-    const convertedLeads = leads.tc_conv + leads.wk_conv + leads.fld_conv;
+    const totalLeads = (leads.telecalls || 0) + (leads.walkins || 0) + (leads.fields || 0);
+    const convertedLeads = (leads.tc_conv || 0) + (leads.wk_conv || 0) + (leads.fld_conv || 0);
 
     res.json({
       totalSales: salesResult[0].total || 0,
       totalLeads,
-      totalCalls: leads.telecalls,
-      totalwalkins: leads.walkins,
-      totalFields: leads.fields,
+      totalCalls: leads.telecalls || 0,
+      totalwalkins: leads.walkins || 0,
+      totalFields: leads.fields || 0,
       convertedLeads,
       totalServices: servicesResult[0].count || 0,
       totalRevenue: servicesResult[0].revenue || 0,
@@ -85,6 +100,7 @@ router.get("/overview", verifyToken, async (req, res) => {
       endDate
     });
   } catch (err) {
+    console.error("overview report error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -95,42 +111,61 @@ router.get("/employee-comparison", verifyToken, async (req, res) => {
   const { startDate, endDate } = getDateRange(filter, from, to);
 
   try {
-    const [employees] = await db.promise().query("SELECT id, first_name, last_name, job_title, emp_email FROM teammember");
-    
+    const [employees] = await db.promise().query("SELECT id, user_id, first_name, last_name, job_title, emp_email, emp_role FROM teammember ORDER BY id ASC");
+
     const reportData = await Promise.all(employees.map(async (emp) => {
       const empName = `${emp.first_name} ${emp.last_name || ""}`.trim();
       const empId = emp.id;
+      const empUserId = emp.user_id || emp.id;
+      const namePattern = `%${empName}%`;
 
       const [leads] = await db.promise().query(`
         SELECT 
-          (SELECT COUNT(*) FROM telecalls WHERE (created_by = ? OR staff_name LIKE ? OR assigned_to = ?) AND call_date BETWEEN ? AND ?) as telecalls,
-          (SELECT COUNT(*) FROM walkins WHERE (created_by = ? OR staff_name LIKE ? OR assigned_to = ?) AND walkin_date BETWEEN ? AND ?) as walkins,
-          (SELECT COUNT(*) FROM fields WHERE (created_by = ? OR staff_name LIKE ? OR assigned_to = ?) AND visit_date BETWEEN ? AND ?) as fields,
-          (SELECT COUNT(*) FROM telecalls WHERE (created_by = ? OR staff_name LIKE ? OR assigned_to = ?) AND call_date BETWEEN ? AND ? AND call_outcome = 'Converted') as tc_conv,
-          (SELECT COUNT(*) FROM walkins WHERE (created_by = ? OR staff_name LIKE ? OR assigned_to = ?) AND walkin_date BETWEEN ? AND ? AND walkin_status = 'Converted') as wk_conv,
-          (SELECT COUNT(*) FROM fields WHERE (created_by = ? OR staff_name LIKE ? OR assigned_to = ?) AND visit_date BETWEEN ? AND ? AND field_outcome = 'Converted') as fld_conv
-      `, [empId, `%${empName}%`, empId, startDate, endDate, empId, `%${empName}%`, empId, startDate, endDate, empId, `%${empName}%`, empId, startDate, endDate, empId, `%${empName}%`, empId, startDate, endDate, empId, `%${empName}%`, empId, startDate, endDate, empId, `%${empName}%`, empId, startDate, endDate]);
+          (SELECT COUNT(*) FROM telecalls WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?) AND (DATE(call_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)) as telecalls,
+          (SELECT COUNT(*) FROM walkins WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?) AND (DATE(walkin_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)) as walkins,
+          (SELECT COUNT(*) FROM fields WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?) AND (DATE(visit_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)) as fields,
+          (SELECT COUNT(*) FROM telecalls WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?) AND (DATE(call_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) AND LOWER(call_outcome) IN ('converted','closed','billed')) as tc_conv,
+          (SELECT COUNT(*) FROM walkins WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?) AND (DATE(walkin_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) AND LOWER(walkin_status) IN ('converted','closed','billed')) as wk_conv,
+          (SELECT COUNT(*) FROM fields WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?) AND (DATE(visit_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?) AND LOWER(field_outcome) IN ('converted','closed','billed')) as fld_conv
+      `, [
+        empId, empUserId, namePattern, empId, empUserId, startDate, endDate, startDate, endDate,
+        empId, empUserId, namePattern, empId, empUserId, startDate, endDate, startDate, endDate,
+        empId, empUserId, namePattern, empId, empUserId, startDate, endDate, startDate, endDate,
+        empId, empUserId, namePattern, empId, empUserId, startDate, endDate, startDate, endDate,
+        empId, empUserId, namePattern, empId, empUserId, startDate, endDate, startDate, endDate,
+        empId, empUserId, namePattern, empId, empUserId, startDate, endDate, startDate, endDate,
+      ]);
 
-      const [services] = await db.promise().query(`SELECT COUNT(*) as count, SUM(total_expenses) as revenue FROM amc_alc_services WHERE (service_person_id = ? OR service_person LIKE ?) AND service_date BETWEEN ? AND ?`, [empId, `%${empName}%`, startDate, endDate]);
+      const [services] = await db.promise().query(`SELECT COUNT(*) as count, COALESCE(SUM(total_expenses), 0) as revenue FROM amc_alc_services WHERE (service_person_id = ? OR service_person_id = ? OR service_person LIKE ?) AND (DATE(service_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, namePattern, startDate, endDate, startDate, endDate]);
 
-      const [tasks] = await db.promise().query(`SELECT COUNT(*) as total, SUM(CASE WHEN project_status = 'Completed' THEN 1 ELSE 0 END) as completed FROM tasks WHERE (assigned_to = ? OR staff_name LIKE ?) AND created_date BETWEEN ? AND ?`, [empId, `%${empName}%`, startDate, endDate]);
+      const [sales] = await db.promise().query(`SELECT COALESCE(SUM(grand_total), 0) as sales_rev FROM performainvoices WHERE (created_by = ? OR created_by = ? OR exec_name LIKE ?) AND (DATE(invoice_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, namePattern, startDate, endDate, startDate, endDate]);
+
+      const [callReports] = await db.promise().query(`SELECT COUNT(*) as total, SUM(CASE WHEN LOWER(status) IN ('completed','closed','done') THEN 1 ELSE 0 END) as completed FROM call_reports WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR executive_name LIKE ? OR service_person LIKE ? OR technician LIKE ?) AND (DATE(report_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, namePattern, namePattern, namePattern, namePattern, startDate, endDate, startDate, endDate]);
+
+      const [tasks] = await db.promise().query(`SELECT COUNT(*) as total, SUM(CASE WHEN project_status = 'Completed' THEN 1 ELSE 0 END) as completed FROM tasks WHERE (assigned_to = ? OR assigned_to = ? OR created_by = ? OR created_by = ? OR staff_name LIKE ?) AND (DATE(created_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, empId, empUserId, namePattern, startDate, endDate, startDate, endDate]);
 
       const l = leads[0];
-      const totalLeads = l.telecalls + l.walkins + l.fields;
-      const leadsConverted = l.tc_conv + l.wk_conv + l.fld_conv;
+      const totalLeads = (l.telecalls || 0) + (l.walkins || 0) + (l.fields || 0);
+      const leadsConverted = (l.tc_conv || 0) + (l.wk_conv || 0) + (l.fld_conv || 0);
+      const totalRevenue = (Number(sales[0].sales_rev) || 0) + (Number(services[0].revenue) || 0);
+      const crTotal = callReports[0]?.total || 0;
+      const crCompleted = callReports[0]?.completed || 0;
 
       return {
         id: empId,
+        user_id: empUserId,
         name: empName,
-        position: emp.job_title || "Staff",
-        telecalls: l.telecalls,
-        walkins: l.walkins,
-        fields: l.fields,
+        position: emp.job_title || emp.emp_role || "Staff",
+        telecalls: l.telecalls || 0,
+        walkins: l.walkins || 0,
+        fields: l.fields || 0,
         totalLeads,
         leadsConverted,
         conversionRate: totalLeads > 0 ? Math.round((leadsConverted / totalLeads) * 100) : 0,
         services: services[0].count || 0,
-        serviceRevenue: services[0].revenue || 0,
+        serviceRevenue: totalRevenue,
+        callReportsTotal: crTotal,
+        callReportsCompleted: crCompleted,
         tasksAssigned: tasks[0].total || 0,
         tasksCompleted: tasks[0].completed || 0
       };
@@ -138,6 +173,7 @@ router.get("/employee-comparison", verifyToken, async (req, res) => {
 
     res.json(reportData);
   } catch (err) {
+    console.error("employee-comparison error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -398,6 +434,137 @@ router.get("/trends", verifyToken, async (req, res) => {
       res.json(rows);
     }
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* GET USER ACTIVITY DASHBOARD (admin only) */
+router.get("/user-activity", verifyToken, async (req, res) => {
+  const isAdmin = req.user.role === "admin" || req.user.role === "subadmin";
+  if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
+
+  const today = formatDateLocal(new Date());
+
+  try {
+    // Get all users (both teammember and users tables)
+    const [members] = await db.promise().query(
+      `SELECT id, user_id, first_name, last_name, job_title, emp_email, emp_role, created_at FROM teammember ORDER BY first_name ASC`
+    );
+
+    const data = await Promise.all(members.map(async (emp) => {
+      const empId = emp.id;
+      const empUserId = emp.user_id || emp.id;
+      const empName = `${emp.first_name} ${emp.last_name || ""}`.trim();
+      const namePattern = `%${empName}%`;
+
+      // Today's leads
+      const [todayLeads] = await db.promise().query(`
+        SELECT
+          (SELECT COUNT(*) FROM telecalls WHERE DATE(call_date) = ? AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as tc_today,
+          (SELECT COUNT(*) FROM walkins WHERE DATE(walkin_date) = ? AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as wk_today,
+          (SELECT COUNT(*) FROM fields WHERE DATE(visit_date) = ? AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as fld_today
+      `, [
+        today, empId, empUserId, namePattern, empId, empUserId,
+        today, empId, empUserId, namePattern, empId, empUserId,
+        today, empId, empUserId, namePattern, empId, empUserId
+      ]);
+
+      // Total leads (this month)
+      const monthStart = today.substring(0, 7) + "-01";
+      const [monthLeads] = await db.promise().query(`
+        SELECT
+          (SELECT COUNT(*) FROM telecalls WHERE call_date BETWEEN ? AND ? AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as tc_month,
+          (SELECT COUNT(*) FROM walkins WHERE walkin_date BETWEEN ? AND ? AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as wk_month,
+          (SELECT COUNT(*) FROM fields WHERE visit_date BETWEEN ? AND ? AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as fld_month,
+          (SELECT COUNT(*) FROM telecalls WHERE call_date BETWEEN ? AND ? AND call_outcome = 'Converted' AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as tc_conv,
+          (SELECT COUNT(*) FROM walkins WHERE walkin_date BETWEEN ? AND ? AND walkin_status = 'Converted' AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as wk_conv,
+          (SELECT COUNT(*) FROM fields WHERE visit_date BETWEEN ? AND ? AND field_outcome = 'Converted' AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR assigned_to = ? OR assigned_to = ?)) as fld_conv
+      `, [
+        monthStart, today, empId, empUserId, namePattern, empId, empUserId,
+        monthStart, today, empId, empUserId, namePattern, empId, empUserId,
+        monthStart, today, empId, empUserId, namePattern, empId, empUserId,
+        monthStart, today, empId, empUserId, namePattern, empId, empUserId,
+        monthStart, today, empId, empUserId, namePattern, empId, empUserId,
+        monthStart, today, empId, empUserId, namePattern, empId, empUserId,
+      ]);
+
+      // Call reports today
+      const [callReports] = await db.promise().query(
+        `SELECT COUNT(*) as total, SUM(CASE WHEN status='Closed' THEN 1 ELSE 0 END) as closed,
+         SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) as completed,
+         SUM(CASE WHEN status='In Progress' OR status='Live' THEN 1 ELSE 0 END) as in_progress
+         FROM call_reports WHERE (DATE(report_date) = ? OR DATE(created_at) = ?) AND (created_by = ? OR created_by = ? OR staff_name LIKE ? OR technician LIKE ?)`,
+        [today, today, empId, empUserId, namePattern, namePattern]
+      );
+
+      // Tasks
+      const [tasks] = await db.promise().query(
+        `SELECT COUNT(*) as total, SUM(CASE WHEN project_status='Completed' THEN 1 ELSE 0 END) as completed,
+         SUM(CASE WHEN project_status='In Progress' OR project_status='Process' THEN 1 ELSE 0 END) as in_progress,
+         SUM(CASE WHEN project_status='Pending' THEN 1 ELSE 0 END) as pending
+         FROM tasks WHERE (assigned_to = ? OR assigned_to = ? OR created_by = ? OR created_by = ? OR staff_name LIKE ?) AND project_status != 'Completed'`,
+        [empId, empUserId, empId, empUserId, namePattern]
+      );
+
+      // Last activity (most recent record created)
+      const [lastAct] = await db.promise().query(`
+        SELECT MAX(ts) as last_activity FROM (
+          SELECT MAX(created_at) as ts FROM telecalls WHERE created_by = ? OR created_by = ?
+          UNION SELECT MAX(created_at) FROM walkins WHERE created_by = ? OR created_by = ?
+          UNION SELECT MAX(created_at) FROM fields WHERE created_by = ? OR created_by = ?
+          UNION SELECT MAX(created_at) FROM call_reports WHERE created_by = ? OR created_by = ?
+          UNION SELECT MAX(created_at) FROM tasks WHERE assigned_to = ? OR assigned_to = ? OR created_by = ? OR created_by = ?
+        ) as t
+      `, [empId, empUserId, empId, empUserId, empId, empUserId, empId, empUserId, empId, empUserId, empId, empUserId]);
+
+      const tl = todayLeads[0];
+      const ml = monthLeads[0];
+      const cr = callReports[0];
+      const tk = tasks[0];
+
+      const todayTotal = (tl.tc_today || 0) + (tl.wk_today || 0) + (tl.fld_today || 0);
+      const monthTotal = (ml.tc_month || 0) + (ml.wk_month || 0) + (ml.fld_month || 0);
+      const monthConverted = (ml.tc_conv || 0) + (ml.wk_conv || 0) + (ml.fld_conv || 0);
+
+      // "Active today" = has any activity today
+      const isActiveToday = todayTotal > 0 || (cr.total || 0) > 0;
+
+      return {
+        id: empId,
+        user_id: empUserId,
+        name: empName,
+        position: emp.job_title || emp.emp_role || "Staff",
+        email: emp.emp_email || "",
+        // Today's numbers
+        todayTelecalls: tl.tc_today || 0,
+        todayWalkins: tl.wk_today || 0,
+        todayFields: tl.fld_today || 0,
+        todayLeads: todayTotal,
+        // Month numbers
+        monthTelecalls: ml.tc_month || 0,
+        monthWalkins: ml.wk_month || 0,
+        monthFields: ml.fld_month || 0,
+        monthLeads: monthTotal,
+        monthConverted,
+        conversionRate: monthTotal > 0 ? Math.round((monthConverted / monthTotal) * 100) : 0,
+        // Call reports
+        callReportsToday: cr.total || 0,
+        callReportsClosed: cr.closed || 0,
+        callReportsCompleted: cr.completed || 0,
+        callReportsInProgress: cr.in_progress || 0,
+        // Tasks
+        tasksPending: tk.pending || 0,
+        tasksInProgress: tk.in_progress || 0,
+        tasksTotal: tk.total || 0,
+        // Status
+        isActiveToday,
+        lastActivity: lastAct[0]?.last_activity || null,
+      };
+    }));
+
+    res.json(data);
+  } catch (err) {
+    console.error("user-activity error:", err);
     res.status(500).json({ error: err.message });
   }
 });

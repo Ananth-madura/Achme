@@ -171,9 +171,7 @@ const checkUpcomingDeadlines = () => {
 };
 */
 
-if (process.env.NODE_ENV !== "test") {
-  setInterval(checkOverdueTasks, 60 * 60 * 1000);
-}
+// setInterval(checkOverdueTasks, 60 * 60 * 1000); // DISABLED to prevent duplicate notification spamming
 // setInterval(checkUpcomingDeadlines, 60 * 60 * 1000); // DISABLED
 
 router.get("/", verifyToken, (req, res) => {

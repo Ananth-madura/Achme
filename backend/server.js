@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
@@ -6,6 +7,15 @@ const http = require("http");
 const db = require("./config/database");
 const { initSocket } = require("./sockets/chatsockets");
 const { initNotificationsSocket } = require("./sockets/notifications");
+
+// ── Process Resilience & Crash Guard (prevents backend crash) ──────────────
+process.on("uncaughtException", (err) => {
+  console.error("🔥 Process Guard (uncaughtException):", err.message, err.stack);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("🔥 Process Guard (unhandledRejection):", reason);
+});
 
 // ── Fail fast if required env vars are missing ──────────────────────────────
 const REQUIRED_ENV = ["DB_HOST", "DB_USER", "DB_PASS", "DB_NAME", "JWT_SECRET"];
@@ -28,13 +38,14 @@ const dynamicOrigin = (origin, callback) => {
 };
 app.use(cors({
   origin: dynamicOrigin,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Cache-Control", "Pragma", "Origin"],
   credentials: true,
 }));
 const corsOrigins = dynamicOrigin;
 
-app.use(express.json());
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
 app.get(["/health", "/api/health"], (req, res) => {
   res.json({
@@ -93,8 +104,20 @@ app.use("/api/amc", require("./routes/amcRoutes"));
 app.use("/api/reports", require("./routes/reportRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
 app.use("/api/setup", require("./routes/setupRoutes"));
+app.use("/api/whatsapp", require("./routes/whatsappRoutes"));
+app.use("/api/wa/templates", require("./routes/waTemplateRoutes"));
+app.use("/api/wa/groups", require("./routes/waGroupRoutes"));
+app.use("/api/wa/campaigns", require("./routes/waCampaignRoutes"));
+app.use("/api/wa/analytics", require("./routes/waAnalyticsRoutes"));
+app.use("/api/wa/config", require("./routes/waConfigRoutes"));
+app.use("/api/wa/webhook", require("./routes/waWebhookRoutes"));
 
-app.use("/uploads", express.static("uploads"));
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use("/uploads", express.static(uploadsDir));
+app.use("/api/uploads", express.static(uploadsDir));
 
 // ── Serve React Frontend statically in production ───────────────────────────
 if (process.env.NODE_ENV === "production") {
@@ -126,12 +149,23 @@ server.on("error", (error) => {
 });
 
 function startServer() {
-  return db.ready.then(() => {
+  return db.ready.then(async () => {
     const io = initSocket(server, corsOrigins);
     const notificationIO = initNotificationsSocket(io, corsOrigins);
     app.set("io", io);
     app.set("notificationIO", io);
     require("./backendutil/reminderScheduler").startSchedulers();
+
+    // Ensure WhatsApp tables exist
+    try {
+      await require("./services/waDatabase").ensureWATables();
+    } catch (e) {
+      console.warn("⚠️ WhatsApp tables setup warning:", e.message);
+    }
+
+    // Start WhatsApp Cloud API queue worker (no Redis fallback = synchronous)
+    const { startWorker } = require("./services/waQueue");
+    startWorker().catch(() => {});
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`✅ Server running: http://0.0.0.0:${PORT} [${process.env.NODE_ENV || "development"}]`);
 

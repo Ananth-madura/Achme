@@ -103,7 +103,7 @@ const NotifDetailPopup = ({ notification, onClose }) => {
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+      style={{ background: "rgba(0,0,0,0.5)", WebkitBackdropFilter: "blur(4px)", backdropFilter: "blur(4px)" }}
       onClick={onClose}
     >
       <div
@@ -482,9 +482,12 @@ const Notifications = () => {
 
   const filteredNotifs = allNotifs
     .filter(n => {
+      if (filter === "unread") return n.is_read === 0;
       if (filter === "missed") return n.type === "missed_reminder_alert";
-      if (filter === "target") return n.type === "target_completed";
-      if (filter === "reminder") return n.type === "reminder_due" || n.type === "reminder_due_now";
+      if (filter === "target") return n.type === "target_completed" || n.type === "target_achieved";
+      if (filter === "reminder") return n.type === "reminder_due" || n.type === "reminder_due_now" || n.type === "lead_missed_reminder";
+      if (filter === "task_summary") return n.type === "daily_task_summary";
+      if (filter === "task_alert") return n.type === "task_not_completed" || n.type === "task_overdue";
       return true;
     })
     .filter(n => {
@@ -626,12 +629,15 @@ const Notifications = () => {
         <div className="flex gap-1 rounded-xl p-1" style={{ background: N.surface }}>
           {[
             { key: "all", label: "All" },
+            { key: "unread", label: "Unread" },
             { key: "missed", label: "Missed Reminders" },
             { key: "target", label: "Targets Completed" },
             { key: "reminder", label: "Reminders Due" },
+            { key: "task_summary", label: "Daily Tasks" },
+            { key: "task_alert", label: "Task Alerts" },
           ].map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${filter === f.key ? "bg-white shadow" : ""}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${filter === f.key ? "bg-white shadow" : ""}`}
               style={{ color: filter === f.key ? N.primary : N.steel }}>
               {f.label}
             </button>

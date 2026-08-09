@@ -41,7 +41,7 @@ const Topbar = ({ onHamburgerClick, showSearch, onSearch, reminderData, reminder
       {/* Left: hamburger + brand */}
       <div className="flex items-center gap-2 md:gap-3">
         <button
-          className="text-gray-600 p-2 lg:hidden cursor-pointer hover:bg-gray-100 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="text-gray-600 p-2 cursor-pointer hover:bg-gray-100 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-blue-500"
           onClick={onHamburgerClick}
           aria-label="Toggle sidebar"
         >
@@ -92,9 +92,6 @@ const Topbar = ({ onHamburgerClick, showSearch, onSearch, reminderData, reminder
             <ul className="py-2 text-sm text-primary-text">
               <li onClick={() => { navigate("/dashboard/profile"); setOpenProfile(false); }} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 cursor-pointer">
                 <User size={16} /> My Profile
-              </li>
-              <li onClick={() => { navigate("/dashboard/profile"); setOpenProfile(false); }} className="flex items-center gap-3 px-4 py-2 hover:bg-gray-100 cursor-pointer">
-                <Lock size={16} /> Change Password
               </li>
               <hr />
               <li

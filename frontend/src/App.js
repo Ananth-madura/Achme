@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { ToastProvider, useToast } from "./components/Toast";
 import { InAppToastContainer } from "./components/InAppToast";
+import ReminderPopup from "./components/ReminderPopup";
+import EnableNotificationsBanner from "./components/EnableNotificationsBanner";
 import { useEffect } from "react";
 import axios from "axios";
 import Login from "./auth/login";
@@ -40,6 +42,8 @@ import UserManagement from "./pages/usermanagement";
 import InstallPrompt from "./components/InstallPrompt";
 import PwaManager from "./components/PwaManager";
 import NetworkSetupBanner from "./components/NetworkSetupBanner";
+import NetworkStatusNotifier from "./components/NetworkStatusNotifier";
+import { Agentation } from "agentation";
 
 const getApiBackend = () => {
   if (typeof window !== "undefined" && window.location.port !== "3000") {
@@ -66,11 +70,9 @@ let lastConnectionStatus = null;
 let checkIntervalId = null;
 
 function DBConnectionChecker() {
-  const { error, info } = useToast();
-
   useEffect(() => {
     const checkConnection = async () => {
-      const timeout = 3000;
+      const timeout = 10000;
       let connected = false;
       let connectedViaProxy = false;
 
@@ -87,18 +89,11 @@ function DBConnectionChecker() {
       }
 
       if (connected || connectedViaProxy) {
-        if (lastConnectionStatus === false || lastConnectionStatus === null) {
-          info(connectedViaProxy ? "Server connected (via proxy)" : "Server connected");
-        }
         lastConnectionStatus = true;
       } else {
-        if (lastConnectionStatus !== false) {
-          error("Cannot connect to server! Start backend on port 5000");
-        }
         lastConnectionStatus = false;
       }
 
-      // Reset interval based on connection status
       if (checkIntervalId) clearInterval(checkIntervalId);
       const intervalTime = lastConnectionStatus ? CHECK_INTERVAL_ONLINE : CHECK_INTERVAL_OFFLINE;
       checkIntervalId = setInterval(checkConnection, intervalTime);
@@ -109,6 +104,69 @@ function DBConnectionChecker() {
       if (checkIntervalId) clearInterval(checkIntervalId);
     };
   }, []);
+
+  return null;
+}
+
+const lastShownErrorMap = {};
+
+// Set ENABLE_HTTP_ERROR_TOASTS = true to re-enable HTTP error toasts anytime
+const ENABLE_HTTP_ERROR_TOASTS = false;
+
+function showErrorOnce(errorFn, key, message, cooldownMs = 10000) {
+  const now = Date.now();
+  const lastTime = lastShownErrorMap[key] || 0;
+  if (now - lastTime > cooldownMs) {
+    lastShownErrorMap[key] = now;
+    errorFn(message);
+  }
+}
+
+function AxiosErrorInterceptor() {
+  const { error } = useToast();
+
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (err) => {
+        if (err.config?.url?.includes("/api/health") || axios.isCancel(err)) {
+          return Promise.reject(err);
+        }
+
+        /* 
+          ========================================================================
+          HTTP ERROR TOAST NOTIFIER (COMMENTED / DISABLED BY DEFAULT)
+          To re-enable HTTP error toast popups, set ENABLE_HTTP_ERROR_TOASTS = true above.
+          ========================================================================
+        */
+        if (ENABLE_HTTP_ERROR_TOASTS) {
+          const method = err.config?.method?.toLowerCase() || "get";
+          const isMutatingAction = ["post", "put", "delete", "patch"].includes(method);
+
+          if (isMutatingAction && err.response) {
+            const status = err.response.status;
+            const msg = err.response.data?.message || err.response.data?.error || "";
+
+            // if (status === 500) {
+            //   showErrorOnce(error, "action_500", `Action Failed (500): ${msg || "Server error occurred during operation."}`);
+            // } else if (status === 403) {
+            //   showErrorOnce(error, "action_403", `Access Denied (403): ${msg || "You do not have permission for this action."}`);
+            // } else if (status === 404) {
+            //   showErrorOnce(error, "action_404", `Not Found (404): ${msg || "The target item or endpoint was not found."}`);
+            // } else if (status >= 400 && msg) {
+            //   showErrorOnce(error, `action_${status}_${msg}`, `Operation Error (${status}): ${msg}`);
+            // }
+          }
+        }
+
+        return Promise.reject(err);
+      }
+    );
+
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, [error]);
 
   return null;
 }
@@ -125,8 +183,12 @@ export default function App() {
       <NotificationProvider>
         <ToastProvider>
           <InAppToastContainer />
+          <ReminderPopup />
+          <EnableNotificationsBanner />
           <DBConnectionChecker />
+          <AxiosErrorInterceptor />
           <NetworkSetupBanner />
+          <NetworkStatusNotifier />
           <InstallPrompt />
           <PwaManager />
           <BrowserRouter>
@@ -166,6 +228,7 @@ export default function App() {
               </Route>
             </Routes>
           </BrowserRouter>
+          {process.env.NODE_ENV === "development" && <Agentation />}
         </ToastProvider>
       </NotificationProvider>
     </AuthProvider>

@@ -445,6 +445,29 @@ async function ensureTablesAndColumns() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY unique_user_id (user_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    },
+    {
+      name: "client_shares",
+      sql: `CREATE TABLE IF NOT EXISTS client_shares (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        client_id INT NOT NULL,
+        shared_to INT NOT NULL,
+        shared_by INT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_client (client_id),
+        INDEX idx_shared_to (shared_to)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+    },
+    {
+      name: "push_subscriptions",
+      sql: `CREATE TABLE IF NOT EXISTS push_subscriptions (
+        user_id INT NOT NULL,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY endpoint (endpoint(255))
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
     }
   ];
 
@@ -471,12 +494,34 @@ async function ensureTablesAndColumns() {
     { table: "teammember", column: "emp_address", definition: "emp_address TEXT DEFAULT NULL" },
     { table: "telecalls", column: "created_by", definition: "created_by INT DEFAULT NULL" },
     { table: "telecalls", column: "email", definition: "email VARCHAR(150) DEFAULT NULL" },
+    { table: "telecalls", column: "company_name", definition: "company_name VARCHAR(150) DEFAULT NULL" },
+    { table: "telecalls", column: "landline_number", definition: "landline_number VARCHAR(20) DEFAULT NULL" },
+    { table: "telecalls", column: "alternate_mobile_number", definition: "alternate_mobile_number VARCHAR(20) DEFAULT NULL" },
+    { table: "telecalls", column: "reference_by", definition: "reference_by VARCHAR(255) DEFAULT NULL" },
+    { table: "telecalls", column: "nearest_landmark", definition: "nearest_landmark VARCHAR(255) DEFAULT NULL" },
+    { table: "telecalls", column: "reference", definition: "reference VARCHAR(255) DEFAULT NULL" },
+    { table: "telecalls", column: "gst_number", definition: "gst_number VARCHAR(20) DEFAULT NULL" },
+    { table: "telecalls", column: "assigned_to", definition: "assigned_to INT DEFAULT NULL" },
     { table: "walkins", column: "assigned_to", definition: "assigned_to INT DEFAULT NULL" },
     { table: "walkins", column: "created_by", definition: "created_by INT DEFAULT NULL" },
     { table: "walkins", column: "email", definition: "email VARCHAR(150) DEFAULT NULL" },
+    { table: "walkins", column: "company_name", definition: "company_name VARCHAR(150) DEFAULT NULL" },
+    { table: "walkins", column: "landline_number", definition: "landline_number VARCHAR(20) DEFAULT NULL" },
+    { table: "walkins", column: "alternate_mobile_number", definition: "alternate_mobile_number VARCHAR(20) DEFAULT NULL" },
+    { table: "walkins", column: "reference_by", definition: "reference_by VARCHAR(255) DEFAULT NULL" },
+    { table: "walkins", column: "nearest_landmark", definition: "nearest_landmark VARCHAR(255) DEFAULT NULL" },
+    { table: "walkins", column: "reference", definition: "reference VARCHAR(255) DEFAULT NULL" },
+    { table: "walkins", column: "gst_number", definition: "gst_number VARCHAR(20) DEFAULT NULL" },
     { table: "fields", column: "assigned_to", definition: "assigned_to INT DEFAULT NULL" },
     { table: "fields", column: "created_by", definition: "created_by INT DEFAULT NULL" },
     { table: "fields", column: "email", definition: "email VARCHAR(150) DEFAULT NULL" },
+    { table: "fields", column: "company_name", definition: "company_name VARCHAR(150) DEFAULT NULL" },
+    { table: "fields", column: "landline_number", definition: "landline_number VARCHAR(20) DEFAULT NULL" },
+    { table: "fields", column: "alternate_mobile_number", definition: "alternate_mobile_number VARCHAR(20) DEFAULT NULL" },
+    { table: "fields", column: "reference_by", definition: "reference_by VARCHAR(255) DEFAULT NULL" },
+    { table: "fields", column: "nearest_landmark", definition: "nearest_landmark VARCHAR(255) DEFAULT NULL" },
+    { table: "fields", column: "reference", definition: "reference VARCHAR(255) DEFAULT NULL" },
+    { table: "fields", column: "gst_number", definition: "gst_number VARCHAR(20) DEFAULT NULL" },
     { table: "quotations", column: "lead_id", definition: "lead_id INT DEFAULT NULL" },
     { table: "quotations", column: "lead_type", definition: "lead_type VARCHAR(20) DEFAULT NULL" },
     { table: "contracts", column: "contract_type", definition: "contract_type VARCHAR(20) DEFAULT 'Service'" },
@@ -580,6 +625,11 @@ async function ensureTablesAndColumns() {
     { table: "call_reports", column: "company_name", definition: "company_name VARCHAR(150) DEFAULT NULL" },
     { table: "call_reports", column: "completed_at", definition: "completed_at TIMESTAMP NULL" },
     { table: "call_reports", column: "carry_forward_date", definition: "carry_forward_date DATE NULL" },
+    { table: "call_reports", column: "travel_start_time", definition: "travel_start_time TIME DEFAULT NULL" },
+    { table: "call_reports", column: "travel_reach_time", definition: "travel_reach_time TIME DEFAULT NULL" },
+    { table: "call_reports", column: "scheduled_time", definition: "scheduled_time TIME DEFAULT NULL" },
+    { table: "call_reports", column: "delivery_call_type", definition: "delivery_call_type VARCHAR(50) DEFAULT NULL" },
+    { table: "call_reports", column: "delivery_project_work", definition: "delivery_project_work DECIMAL(10,2) DEFAULT 0" },
     { table: "amc_alc_services", column: "amount_collected", definition: "amount_collected DECIMAL(10,2) DEFAULT 0" },
     { table: "amc_alc_services", column: "payment_mode", definition: "payment_mode VARCHAR(50) DEFAULT NULL" },
     { table: "amc_alc_services", column: "call_number", definition: "call_number INT DEFAULT 1" },
@@ -598,15 +648,65 @@ async function ensureTablesAndColumns() {
     { table: "clients", column: "original_lead_type", definition: "original_lead_type ENUM('telecall','walkin','field') DEFAULT NULL" },
     { table: "clients", column: "converted_at", definition: "converted_at TIMESTAMP NULL DEFAULT NULL" },
     { table: "clients", column: "lead_email", definition: "lead_email VARCHAR(150) DEFAULT NULL" },
+    { table: "quotations", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_general", definition: "terms_general LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_tax", definition: "terms_tax LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_project_period", definition: "terms_project_period LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_validity", definition: "terms_validity LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_payment", definition: "terms_payment LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_payment_custom", definition: "terms_payment_custom LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_warranty", definition: "terms_warranty LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "custom_terms", definition: "custom_terms LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_general", definition: "terms_general LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_tax", definition: "terms_tax LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_project_period", definition: "terms_project_period LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_validity", definition: "terms_validity LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_payment", definition: "terms_payment LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_payment_custom", definition: "terms_payment_custom LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_warranty", definition: "terms_warranty LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "custom_terms", definition: "custom_terms LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_general", definition: "terms_general LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_tax", definition: "terms_tax LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_project_period", definition: "terms_project_period LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_validity", definition: "terms_validity LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_payment", definition: "terms_payment LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_payment_custom", definition: "terms_payment_custom LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_warranty", definition: "terms_warranty LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "custom_terms", definition: "custom_terms LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_general", definition: "terms_general LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_tax", definition: "terms_tax LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_project_period", definition: "terms_project_period LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_validity", definition: "terms_validity LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_payment", definition: "terms_payment LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_payment_custom", definition: "terms_payment_custom LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "terms_warranty", definition: "terms_warranty LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "service_estimations", column: "custom_terms", definition: "custom_terms LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_general", definition: "terms_general LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_tax", definition: "terms_tax LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_project_period", definition: "terms_project_period LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_validity", definition: "terms_validity LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_payment", definition: "terms_payment LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_payment_custom", definition: "terms_payment_custom LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "terms_warranty", definition: "terms_warranty LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "estimate_invoices", column: "custom_terms", definition: "custom_terms LONGTEXT DEFAULT NULL", expectedType: "longtext" },
     { table: "clients", column: "lead_city", definition: "lead_city VARCHAR(100) DEFAULT NULL" },
     { table: "clients", column: "lead_reference", definition: "lead_reference VARCHAR(255) DEFAULT NULL" },
     { table: "clients", column: "lead_purpose", definition: "lead_purpose VARCHAR(255) DEFAULT NULL" },
     { table: "clients", column: "client_status", definition: "client_status ENUM('active','inactive','converted') DEFAULT 'active'" },
-    { table: "clients", column: "lead_staff_name", definition: "lead_staff_name VARCHAR(150) DEFAULT NULL" },
     { table: "clients", column: "lead_id_display", definition: "lead_id_display VARCHAR(50) DEFAULT NULL" },
     { table: "clients", column: "assigned_teammember_id", definition: "assigned_teammember_id INT DEFAULT NULL" },
     { table: "clients", column: "state", definition: "state VARCHAR(100) DEFAULT NULL" },
     { table: "clients", column: "pincode", definition: "pincode VARCHAR(20) DEFAULT NULL" },
+    { table: "clients", column: "contact_person", definition: "contact_person VARCHAR(255) DEFAULT ''" },
+    { table: "clients", column: "address_2", definition: "address_2 VARCHAR(500) DEFAULT ''" },
+    { table: "clients", column: "landline_number", definition: "landline_number VARCHAR(20) DEFAULT NULL" },
+    { table: "clients", column: "alternate_mobile_number", definition: "alternate_mobile_number VARCHAR(20) DEFAULT NULL" },
+    { table: "clients", column: "reference_by", definition: "reference_by VARCHAR(255) DEFAULT NULL" },
+    { table: "clients", column: "nearest_landmark", definition: "nearest_landmark VARCHAR(255) DEFAULT NULL" },
     { table: "users", column: "emp_id", definition: "emp_id VARCHAR(50) DEFAULT NULL", uniqueKey: "emp_id" },
     // Quotations extra columns
     { table: "quotations", column: "reference_no", definition: "reference_no VARCHAR(50) DEFAULT NULL" },
@@ -624,14 +724,14 @@ async function ensureTablesAndColumns() {
     { table: "quotations", column: "exec_name", definition: "exec_name VARCHAR(100) DEFAULT NULL" },
     { table: "quotations", column: "exec_phone", definition: "exec_phone VARCHAR(20) DEFAULT NULL" },
     { table: "quotations", column: "exec_email", definition: "exec_email VARCHAR(150) DEFAULT NULL" },
-    { table: "quotations", column: "terms_general", definition: "terms_general TINYINT(1) DEFAULT 0" },
-    { table: "quotations", column: "terms_tax", definition: "terms_tax TINYINT(1) DEFAULT 0" },
-    { table: "quotations", column: "terms_project_period", definition: "terms_project_period VARCHAR(100) DEFAULT NULL" },
-    { table: "quotations", column: "terms_validity", definition: "terms_validity VARCHAR(50) DEFAULT NULL" },
-    { table: "quotations", column: "terms_separate_orders", definition: "terms_separate_orders TEXT DEFAULT NULL" },
-    { table: "quotations", column: "terms_payment", definition: "terms_payment VARCHAR(100) DEFAULT NULL" },
-    { table: "quotations", column: "terms_payment_custom", definition: "terms_payment_custom VARCHAR(100) DEFAULT NULL" },
-    { table: "quotations", column: "terms_warranty", definition: "terms_warranty VARCHAR(100) DEFAULT NULL" },
+    { table: "quotations", column: "terms_general", definition: "terms_general TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "quotations", column: "terms_tax", definition: "terms_tax TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "quotations", column: "terms_project_period", definition: "terms_project_period TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "quotations", column: "terms_validity", definition: "terms_validity TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "quotations", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "quotations", column: "terms_payment", definition: "terms_payment TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "quotations", column: "terms_payment_custom", definition: "terms_payment_custom TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "quotations", column: "terms_warranty", definition: "terms_warranty TEXT DEFAULT NULL", expectedType: "text" },
     { table: "quotations", column: "hsn_sac_code", definition: "hsn_sac_code VARCHAR(50) DEFAULT NULL" },
     { table: "quotations", column: "supplier_branch", definition: "supplier_branch VARCHAR(100) DEFAULT NULL" },
     { table: "quotations", column: "bank_details_id", definition: "bank_details_id VARCHAR(50) DEFAULT NULL" },
@@ -640,7 +740,7 @@ async function ensureTablesAndColumns() {
     { table: "quotations", column: "bank_account", definition: "bank_account VARCHAR(50) DEFAULT NULL" },
     { table: "quotations", column: "bank_ifsc", definition: "bank_ifsc VARCHAR(50) DEFAULT NULL" },
     { table: "quotations", column: "bank_branch", definition: "bank_branch VARCHAR(100) DEFAULT NULL" },
-    { table: "quotations", column: "custom_terms", definition: "custom_terms TEXT DEFAULT NULL" },
+    { table: "quotations", column: "custom_terms", definition: "custom_terms TEXT DEFAULT NULL", expectedType: "text" },
     { table: "quotations", column: "is_latest", definition: "is_latest TINYINT(1) DEFAULT 1" },
     { table: "quotations", column: "parent_id", definition: "parent_id INT DEFAULT NULL" },
     { table: "quotations", column: "version", definition: "version INT DEFAULT 1" },
@@ -660,14 +760,14 @@ async function ensureTablesAndColumns() {
     { table: "performainvoices", column: "exec_name", definition: "exec_name VARCHAR(100) DEFAULT NULL" },
     { table: "performainvoices", column: "exec_phone", definition: "exec_phone VARCHAR(20) DEFAULT NULL" },
     { table: "performainvoices", column: "exec_email", definition: "exec_email VARCHAR(150) DEFAULT NULL" },
-    { table: "performainvoices", column: "terms_general", definition: "terms_general TINYINT(1) DEFAULT 0" },
-    { table: "performainvoices", column: "terms_tax", definition: "terms_tax TINYINT(1) DEFAULT 0" },
-    { table: "performainvoices", column: "terms_project_period", definition: "terms_project_period VARCHAR(100) DEFAULT NULL" },
-    { table: "performainvoices", column: "terms_validity", definition: "terms_validity VARCHAR(50) DEFAULT NULL" },
-    { table: "performainvoices", column: "terms_separate_orders", definition: "terms_separate_orders TEXT DEFAULT NULL" },
-    { table: "performainvoices", column: "terms_payment", definition: "terms_payment VARCHAR(100) DEFAULT NULL" },
-    { table: "performainvoices", column: "terms_payment_custom", definition: "terms_payment_custom VARCHAR(100) DEFAULT NULL" },
-    { table: "performainvoices", column: "terms_warranty", definition: "terms_warranty VARCHAR(100) DEFAULT NULL" },
+    { table: "performainvoices", column: "terms_general", definition: "terms_general TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "performainvoices", column: "terms_tax", definition: "terms_tax TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "performainvoices", column: "terms_project_period", definition: "terms_project_period TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "performainvoices", column: "terms_validity", definition: "terms_validity TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "performainvoices", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "performainvoices", column: "terms_payment", definition: "terms_payment TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "performainvoices", column: "terms_payment_custom", definition: "terms_payment_custom TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "performainvoices", column: "terms_warranty", definition: "terms_warranty TEXT DEFAULT NULL", expectedType: "text" },
     { table: "performainvoices", column: "hsn_sac_code", definition: "hsn_sac_code VARCHAR(50) DEFAULT NULL" },
     { table: "performainvoices", column: "supplier_branch", definition: "supplier_branch VARCHAR(100) DEFAULT NULL" },
     { table: "performainvoices", column: "bank_details_id", definition: "bank_details_id VARCHAR(50) DEFAULT NULL" },
@@ -676,7 +776,7 @@ async function ensureTablesAndColumns() {
     { table: "performainvoices", column: "bank_account", definition: "bank_account VARCHAR(50) DEFAULT NULL" },
     { table: "performainvoices", column: "bank_ifsc", definition: "bank_ifsc VARCHAR(50) DEFAULT NULL" },
     { table: "performainvoices", column: "bank_branch", definition: "bank_branch VARCHAR(100) DEFAULT NULL" },
-    { table: "performainvoices", column: "custom_terms", definition: "custom_terms TEXT DEFAULT NULL" },
+    { table: "performainvoices", column: "custom_terms", definition: "custom_terms TEXT DEFAULT NULL", expectedType: "text" },
     // Services (service estimation) extra columns
     { table: "services", column: "reference_no", definition: "reference_no VARCHAR(50) DEFAULT NULL" },
     { table: "services", column: "from_address_id", definition: "from_address_id INT DEFAULT NULL" },
@@ -693,14 +793,14 @@ async function ensureTablesAndColumns() {
     { table: "services", column: "exec_name", definition: "exec_name VARCHAR(100) DEFAULT NULL" },
     { table: "services", column: "exec_phone", definition: "exec_phone VARCHAR(20) DEFAULT NULL" },
     { table: "services", column: "exec_email", definition: "exec_email VARCHAR(150) DEFAULT NULL" },
-    { table: "services", column: "terms_general", definition: "terms_general TINYINT(1) DEFAULT 0" },
-    { table: "services", column: "terms_tax", definition: "terms_tax TINYINT(1) DEFAULT 0" },
-    { table: "services", column: "terms_project_period", definition: "terms_project_period VARCHAR(100) DEFAULT NULL" },
-    { table: "services", column: "terms_validity", definition: "terms_validity VARCHAR(50) DEFAULT NULL" },
-    { table: "services", column: "terms_separate_orders", definition: "terms_separate_orders TEXT DEFAULT NULL" },
-    { table: "services", column: "terms_payment", definition: "terms_payment VARCHAR(100) DEFAULT NULL" },
-    { table: "services", column: "terms_payment_custom", definition: "terms_payment_custom VARCHAR(100) DEFAULT NULL" },
-    { table: "services", column: "terms_warranty", definition: "terms_warranty VARCHAR(100) DEFAULT NULL" },
+    { table: "services", column: "terms_general", definition: "terms_general TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "services", column: "terms_tax", definition: "terms_tax TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "services", column: "terms_project_period", definition: "terms_project_period TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "services", column: "terms_validity", definition: "terms_validity TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "services", column: "terms_separate_orders", definition: "terms_separate_orders LONGTEXT DEFAULT NULL", expectedType: "longtext" },
+    { table: "services", column: "terms_payment", definition: "terms_payment TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "services", column: "terms_payment_custom", definition: "terms_payment_custom TEXT DEFAULT NULL", expectedType: "text" },
+    { table: "services", column: "terms_warranty", definition: "terms_warranty TEXT DEFAULT NULL", expectedType: "text" },
     { table: "services", column: "hsn_sac_code", definition: "hsn_sac_code VARCHAR(50) DEFAULT NULL" },
     { table: "services", column: "supplier_branch", definition: "supplier_branch VARCHAR(100) DEFAULT NULL" },
     { table: "services", column: "bank_details_id", definition: "bank_details_id VARCHAR(50) DEFAULT NULL" },
@@ -709,7 +809,7 @@ async function ensureTablesAndColumns() {
     { table: "services", column: "bank_account", definition: "bank_account VARCHAR(50) DEFAULT NULL" },
     { table: "services", column: "bank_ifsc", definition: "bank_ifsc VARCHAR(50) DEFAULT NULL" },
     { table: "services", column: "bank_branch", definition: "bank_branch VARCHAR(100) DEFAULT NULL" },
-    { table: "services", column: "custom_terms", definition: "custom_terms TEXT DEFAULT NULL" },
+    { table: "services", column: "custom_terms", definition: "custom_terms TEXT DEFAULT NULL", expectedType: "text" },
     // Estimate new extra columns
     { table: "estimatenew", column: "client_company", definition: "client_company VARCHAR(150) DEFAULT NULL" },
     { table: "estimatenew", column: "client_address", definition: "client_address TEXT DEFAULT NULL" },
@@ -817,6 +917,22 @@ async function ensureTablesAndColumns() {
       console.error(`Error adding column ${table}.${column}:`, e.message);
     }
   }
+
+  try {
+    await queryAsync(`
+      INSERT INTO clients (name, email, phone, city, gst_number, created_by)
+      SELECT c.customer_name, c.email, c.mobile_number, c.location_city, c.gst_number, c.created_by
+      FROM customers c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM clients cl 
+        WHERE (cl.phone IS NOT NULL AND cl.phone != '' AND cl.phone = c.mobile_number) 
+           OR (cl.email IS NOT NULL AND cl.email != '' AND cl.email = c.email) 
+           OR (cl.name = c.customer_name)
+      )
+    `);
+  } catch (e) {
+    console.log("Customer-to-client sync skip:", e.message);
+  }
 }
 
 function queryAsync(sql, params = []) {
@@ -838,7 +954,7 @@ async function seedDefaultEmployees() {
       });
     });
     await new Promise((resolve) => {
-      db.query("ALTER TABLE teammember MODIFY COLUMN emp_role ENUM('Developer','BDM','Manager','Sales') DEFAULT 'Sales'", (err) => {
+      db.query("ALTER TABLE teammember MODIFY COLUMN emp_role VARCHAR(150) DEFAULT 'Sales'", (err) => {
         if (err) console.log("Alter teammember emp_role:", err.message);
         else console.log("Teammember emp_role updated");
         resolve();
@@ -885,7 +1001,21 @@ async function seedDefaultEmployees() {
     { first_name: "Malarvannan", last_name: "", emp_id: "AC016", email: "malarvannan@technostore.co.in", mobile: "", job_title: "Service", emp_role: "Sales", role: "subadmin" },
     { first_name: "Jai", last_name: "sir", emp_id: "AC002", email: "jai@technostore.co.in", mobile: "", job_title: "Admin dept", emp_role: "Manager", role: "subadmin" },
     { first_name: "Manikandan", last_name: "", emp_id: "AC061", email: "mani@technostore.co.in", mobile: "", job_title: "sales dept", emp_role: "Sales", role: "employee" },
-    { first_name: "Anand", last_name: "", emp_id: "AC012", email: "sales3@technostore.co.in", mobile: "", job_title: "sales dept", emp_role: "Sales", role: "employee" }
+    { first_name: "Anand", last_name: "", emp_id: "AC012", email: "sales3@technostore.co.in", mobile: "", job_title: "sales dept", emp_role: "Sales", role: "employee" },
+    // 13 Service Engineers
+    { first_name: "Thanapalan", last_name: "", emp_id: "AC017", email: "thanapalan@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Rajesh", last_name: "", emp_id: "AC080", email: "rajesh@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Kandhavel", last_name: "", emp_id: "AC086", email: "kandhavel@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Gopi", last_name: "", emp_id: "AC078", email: "gopi@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Saran raj", last_name: "", emp_id: "AC087", email: "saranraj@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Bharani", last_name: "", emp_id: "AC105", email: "bharani@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Damodaran", last_name: "", emp_id: "AC085", email: "damodaran@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Suresh", last_name: "", emp_id: "AC073", email: "suresh@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Ranjith", last_name: "", emp_id: "AC054", email: "ranjith@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Sivakumar", last_name: "", emp_id: "AC036", email: "sivakumar@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Manikandaraja", last_name: "", emp_id: "AC097", email: "manikandaraja@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Malar vannan", last_name: "", emp_id: "AC016", email: "malarvannan16@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" },
+    { first_name: "Faizal", last_name: "", emp_id: "AC068", email: "faizal@achmecommunication.com", mobile: "", job_title: "Service Engineer", emp_role: "Engineer" }
   ];
 
   for (const employee of employees) {

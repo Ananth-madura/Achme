@@ -12,12 +12,15 @@ import SMTPConfigPrompt from "../components/SMTPConfigPrompt";
 import { initMobileTables } from "../utils/mobileTableHelper";
 import MadhuraLogo from "./Madhura-logo.png";
 
+import { isServiceEngineer } from "../utils/serviceEngineerHelper";
+
 export const DashboardSearchContext = createContext("");
 export const ReminderContext = createContext({ setReminderData: () => { }, setReminderNotes: () => { } });
 
 export default function DashboardLayout() {
   const { user, login } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [searchQuery, setSearchQuery] = useState("");
   const [reminderData, setReminderData] = useState(null);
   const [reminderNotes, setReminderNotes] = useState(null);
@@ -27,13 +30,43 @@ export default function DashboardLayout() {
 
   useEffect(() => { initMobileTables(); }, []);
 
+  useEffect(() => {
+    let prevWidth = window.innerWidth;
+    const handleResize = () => {
+      const currWidth = window.innerWidth;
+      const mobile = currWidth < 768;
+      setIsMobile(mobile);
+
+      // Handle layouts transitions
+      if ((prevWidth < 768 && currWidth >= 768) || (prevWidth >= 768 && currWidth < 768)) {
+        setSidebarOpen(currWidth >= 1024);
+      } else if ((prevWidth < 1024 && currWidth >= 1024) || (prevWidth >= 1024 && currWidth < 1024)) {
+        if (!mobile) {
+          setSidebarOpen(currWidth >= 1024);
+        }
+      }
+      prevWidth = currWidth;
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   // Sync user profile/permissions on mount
   useEffect(() => {
     if (user && login) {
       axios.get(`${API}/api/auth/profile`)
         .then(res => {
-          if (res.data.role !== user.role) {
-            login({ ...user, role: res.data.role });
+          if (
+            res.data.role !== user.role ||
+            res.data.job_title !== user.job_title ||
+            res.data.emp_role !== user.emp_role
+          ) {
+            login({
+              ...user,
+              role: res.data.role,
+              job_title: res.data.job_title,
+              emp_role: res.data.emp_role
+            });
           }
         })
         .catch(err => console.error("Permission sync error:", err));
@@ -81,6 +114,18 @@ export default function DashboardLayout() {
 
   if (!user) return <Navigate to="/login" />;
 
+  const isEngineer = isServiceEngineer(user);
+  const allowedEngineerPaths = [
+    "/dashboard/call-report",
+    "/dashboard/products",
+    "/dashboard/profile",
+    "/dashboard/notifications"
+  ];
+
+  if (isEngineer && !allowedEngineerPaths.some(p => location.pathname.startsWith(p))) {
+    return <Navigate to="/dashboard/call-report" replace />;
+  }
+
   const isDashboard = location.pathname === "/dashboard" || location.pathname === "/dashboard/";
 
   return (
@@ -108,29 +153,47 @@ export default function DashboardLayout() {
             />
           )}
 
-          {/* Sidebar — visible from md (768px) */}
+          {/* Sidebar */}
           <div
-            className={`fixed left-0 top-[65px] bg-shell text-shell-text z-40 transition-transform duration-300
-            w-[250px] h-[calc(100vh-65px)]
-            md:h-[calc(100vh-65px)] md:translate-x-0
-            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-            phone-sidebar`}
+            className={`fixed left-0 top-[65px] bg-shell text-shell-text z-40 transition-all duration-300
+            ${isMobile
+                ? `w-[250px] ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`
+                : `${sidebarOpen ? "w-[250px]" : "w-[70px]"} translate-x-0`
+              }
+            h-[calc(100vh-65px)] phone-sidebar`}
           >
             {user.role === "admin" ? (
-              <AdminSidebar onNavigate={() => setSidebarOpen(false)} />
+              <AdminSidebar
+                onNavigate={() => setSidebarOpen(false)}
+                collapsed={!isMobile && !sidebarOpen}
+                onExpand={() => setSidebarOpen(true)}
+              />
             ) : (
-              <UserSidebar onNavigate={() => setSidebarOpen(false)} />
+              <UserSidebar
+                onNavigate={() => setSidebarOpen(false)}
+                collapsed={!isMobile && !sidebarOpen}
+                onExpand={() => setSidebarOpen(true)}
+              />
             )}
           </div>
 
           {/* CENTER CONTENT */}
-          <div className="md:ml-[250px] mt-[65px] w-full max-w-full md:max-w-[calc(100%-250px)] p-3 md:p-5 lg:p-6 min-h-screen text-shell-text bg-content flex flex-col pb-16 md:pb-6">
+          <div
+            className={`transition-all duration-300 mt-[65px] w-full max-w-full min-h-screen text-shell-text bg-content flex flex-col pb-16 md:pb-6
+            ${isMobile
+                ? "ml-0 max-w-full"
+                : `${sidebarOpen ? "md:ml-[250px] md:max-w-[calc(100%-250px)]" : "md:ml-[70px] md:max-w-[calc(100%-70px)]"}`
+              }
+            p-3 md:p-5 lg:p-6`}
+          >
             <div className="flex-1 w-full max-w-7xl mx-auto">
               <Outlet />
             </div>
             <div className="mt-6 flex items-center justify-end gap-2 text-xs md:text-sm font-bold text-blue-600 uppercase tracking-wider">
-              <span>Created by</span>
-              <img src={MadhuraLogo} alt="Madhura Logo" className="h-5 w-auto object-contain" />
+              <span className="hidden md:block italic">DEVELOPED BY</span>
+              <a href="https://madhuratech.com/" target="_blank" rel="noopener noreferrer" className="inline-block hover:opacity-85 transition">
+                <img src={MadhuraLogo} alt="Madhura Logo" className="h-5 w-auto object-contain" />
+              </a>
             </div>
           </div>
         </div>

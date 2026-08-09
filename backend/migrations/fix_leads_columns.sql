@@ -1,23 +1,40 @@
 -- Migration: Fix missing columns for Telecalls, Walkins, Fields
 -- Run this SQL against your MySQL database
 
--- Add reference column to Telecalls if not exists
+-- Add missing columns to Telecalls if not exists
+ALTER TABLE Telecalls ADD COLUMN IF NOT EXISTS company_name VARCHAR(150) DEFAULT NULL;
+ALTER TABLE Telecalls ADD COLUMN IF NOT EXISTS landline_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE Telecalls ADD COLUMN IF NOT EXISTS alternate_mobile_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE Telecalls ADD COLUMN IF NOT EXISTS reference_by VARCHAR(255) DEFAULT NULL;
+ALTER TABLE Telecalls ADD COLUMN IF NOT EXISTS nearest_landmark VARCHAR(255) DEFAULT NULL;
 ALTER TABLE Telecalls ADD COLUMN IF NOT EXISTS reference VARCHAR(255) DEFAULT NULL;
-
--- Add gst_number column to Telecalls if not exists
 ALTER TABLE Telecalls ADD COLUMN IF NOT EXISTS gst_number VARCHAR(20) DEFAULT NULL;
 
--- Add reference column to Walkins if not exists
+-- Add missing columns to Walkins if not exists
+ALTER TABLE Walkins ADD COLUMN IF NOT EXISTS company_name VARCHAR(150) DEFAULT NULL;
+ALTER TABLE Walkins ADD COLUMN IF NOT EXISTS landline_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE Walkins ADD COLUMN IF NOT EXISTS alternate_mobile_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE Walkins ADD COLUMN IF NOT EXISTS reference_by VARCHAR(255) DEFAULT NULL;
+ALTER TABLE Walkins ADD COLUMN IF NOT EXISTS nearest_landmark VARCHAR(255) DEFAULT NULL;
 ALTER TABLE Walkins ADD COLUMN IF NOT EXISTS reference VARCHAR(255) DEFAULT NULL;
-
--- Add gst_number column to Walkins if not exists
 ALTER TABLE Walkins ADD COLUMN IF NOT EXISTS gst_number VARCHAR(20) DEFAULT NULL;
 
--- Add reference column to fields if not exists
+-- Add missing columns to fields if not exists
+ALTER TABLE fields ADD COLUMN IF NOT EXISTS company_name VARCHAR(150) DEFAULT NULL;
+ALTER TABLE fields ADD COLUMN IF NOT EXISTS landline_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE fields ADD COLUMN IF NOT EXISTS alternate_mobile_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE fields ADD COLUMN IF NOT EXISTS reference_by VARCHAR(255) DEFAULT NULL;
+ALTER TABLE fields ADD COLUMN IF NOT EXISTS nearest_landmark VARCHAR(255) DEFAULT NULL;
 ALTER TABLE fields ADD COLUMN IF NOT EXISTS reference VARCHAR(255) DEFAULT NULL;
-
--- Add gst_number column to fields if not exists
 ALTER TABLE fields ADD COLUMN IF NOT EXISTS gst_number VARCHAR(20) DEFAULT NULL;
+
+-- Add missing columns to clients if not exists
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS contact_person VARCHAR(255) DEFAULT '';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS address_2 VARCHAR(500) DEFAULT '';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS landline_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS alternate_mobile_number VARCHAR(20) DEFAULT NULL;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS reference_by VARCHAR(255) DEFAULT NULL;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS nearest_landmark VARCHAR(255) DEFAULT NULL;
 
 -- Add quotation_count column to teammember if not exists
 ALTER TABLE teammember ADD COLUMN IF NOT EXISTS quotation_count INT DEFAULT 0;
