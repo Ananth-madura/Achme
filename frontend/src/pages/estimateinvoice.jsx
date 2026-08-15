@@ -101,7 +101,7 @@ const EstimateInvoice = () => {
   }, [searchTerm]);
   const [mailOpen, setMailOpen] = useState(false);
   const [mailTo, setMailTo] = useState("");
-  const [mailCc, setMailCc] = useState("");
+  const [mailCc, setMailCc] = useState("Kk@achmecommunication.com");
   const [mailSubject, setMailSubject] = useState("");
   const [mailContent, setMailContent] = useState("");
   const [mailSending, setMailSending] = useState(false);
@@ -358,7 +358,8 @@ const EstimateInvoice = () => {
       client_state: h.client_state || "", client_pincode: h.client_pincode || "", client_country: h.client_country || "India",
       tax_type: h.tax_type || "GST18", custom_tax: h.custom_tax || "",
       exec_name: h.exec_name || "", exec_phone: h.exec_phone || "", exec_email: h.exec_email || "",
-      terms_general: !!h.terms_general, terms_tax: !!h.terms_tax,
+      terms_general: h.terms_general === 1 || h.terms_general === true || h.terms_general === "1" || h.terms_general === "true",
+      terms_tax: h.terms_tax === 1 || h.terms_tax === true || h.terms_tax === "1" || h.terms_tax === "true",
       terms_project_period: h.terms_project_period || "30-60 days from Purchase Order date",
       terms_validity: h.terms_validity || "15 days",
       terms_separate_orders: (() => {
@@ -501,16 +502,8 @@ const EstimateInvoice = () => {
       console.error("Error checking SMTP config before sending mail:", e);
     }
     const inv = findInvoice(id);
-    let adminEmail = "";
-    try {
-      const adminRes = await axios.get(`${API}/api/auth/admin-email`, getAuthConfig());
-      adminEmail = adminRes.data.email || "";
-    } catch (e) {
-      console.error("Error fetching admin email:", e);
-      adminEmail = "admin@achme.com";
-    }
     setMailTo(inv?.email || "");
-    setMailCc(adminEmail);
+    setMailCc("Kk@achmecommunication.com");
     setMailSubject(`Estimate Invoice ${formatEINumber(id, inv?.invoice_date)}`);
     setMailContent("");
     setMailOpen(true);
@@ -521,7 +514,7 @@ const EstimateInvoice = () => {
     if (!mailTo) return alert("Please enter recipient email");
     setMailSending(true);
     try {
-      await axios.post(`${API}/api/estimate-invoice/send-email/${id}`, { to: mailTo, cc: mailCc, subject: mailSubject, body: mailContent }, getAuthConfig());
+      await axios.post(`${API}/api/estimate-invoice/send-email/${id}`, { to: mailTo, cc: "Kk@achmecommunication.com", subject: mailSubject, body: mailContent }, getAuthConfig());
       alert("Email sent successfully"); setMailOpen(false);
     } catch (error) { alert(error.response?.data?.message || "Failed to send email"); }
     finally { setMailSending(false); }
@@ -1452,7 +1445,13 @@ const EstimateInvoice = () => {
               <label className="text-xs font-bold text-gray-500 uppercase">To (Email)</label>
               <input type="email" value={mailTo} onChange={e => setMailTo(e.target.value)} className="border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-100" placeholder="recipient@email.com" />
             </div>
-            {/* CC admin email sent silently — not shown to user */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-gray-500 uppercase flex items-center justify-between">
+                <span>CC (Email)</span>
+                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">Default / Non-editable</span>
+              </label>
+              <input type="email" value="Kk@achmecommunication.com" readOnly disabled className="border rounded-lg px-4 py-2 outline-none bg-gray-100 text-gray-600 cursor-not-allowed font-medium" />
+            </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs font-bold text-gray-500 uppercase">Subject</label>
               <input type="text" value={mailSubject} onChange={e => setMailSubject(e.target.value)} className="border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-100" />

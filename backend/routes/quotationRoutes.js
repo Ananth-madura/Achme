@@ -214,9 +214,10 @@ router.post("/create", verifyToken, (req, res) => {
   const ex = extra || {};
   const refNo = `QT-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
   const quotationDate = (q && (q.quotation_date || q.invoice_date)) || new Date().toISOString().slice(0, 10);
+  const newStatus = (q && (q.status || q.quotation_status)) || (ex && ex.status) || "Pending";
 
   db.beginTransaction(err => {
-    if (err) return res.status(500).json({ message: "Transaction error" });
+    if (err) return res.status(500).json({ message: "Transaction error: " + err.message });
 
     // Save to customers table
     db.query(
@@ -229,46 +230,6 @@ router.post("/create", verifyToken, (req, res) => {
         }
         const customerId = customerResult.insertId;
 
-        // Also save to clients table for cross-module reuse
-        db.query(
-          "SELECT id FROM clients WHERE phone = ?",
-          [customer.mobile_number],
-          (err, clientRows) => {
-            if (err) { console.error("Client SELECT error:", err); return; }
-            if (!err && clientRows.length === 0) {
-              db.query(
-                `INSERT INTO clients (name, company_name, email, phone, gst_number, address, state, pincode) VALUES (?,?,?,?,?,?,?,?)`,
-                [
-                  customer.customer_name,
-                  ex.client_company || customer.customer_name,
-                  customer.email,
-                  customer.mobile_number,
-                  customer.gst_number || null,
-                  ex.client_address1 || null,
-                  ex.client_state || null,
-                  ex.client_pincode || null
-                ],
-                (insErr) => { if (insErr) console.error("Client INSERT error:", insErr); }
-              );
-            } else if (!err && clientRows.length > 0) {
-              db.query(
-                `UPDATE clients SET name=?, company_name=?, email=?, gst_number=?, address=?, state=?, pincode=? WHERE id=?`,
-                [
-                  customer.customer_name,
-                  ex.client_company || customer.customer_name,
-                  customer.email,
-                  customer.gst_number || null,
-                  ex.client_address1 || null,
-                  ex.client_state || null,
-                  ex.client_pincode || null,
-                  clientRows[0].id
-                ],
-                (updErr) => { if (updErr) console.error("Client UPDATE error:", updErr); }
-              );
-            }
-          }
-        );
-
         db.query(
           `INSERT INTO quotations
            (customer_id, quotation_date, total_cgst, total_sgst, total_igst, subtotal, total_tax, total_discount, grand_total,
@@ -277,8 +238,8 @@ router.post("/create", verifyToken, (req, res) => {
             tax_type, custom_tax, exec_name, exec_phone, exec_email,
             terms_general, terms_tax, terms_project_period, terms_validity, terms_separate_orders,
             terms_payment, terms_payment_custom, terms_warranty, hsn_sac_code, supplier_branch,
-            bank_details_id, bank_company, bank_name, bank_account, bank_ifsc, bank_branch, custom_terms, gst_mode, created_by)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            bank_details_id, bank_company, bank_name, bank_account, bank_ifsc, bank_branch, custom_terms, gst_mode, status, created_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [
             customerId, quotationDate,
             q.total_cgst || 0, q.total_sgst || 0, q.total_igst || 0, q.subtotal || 0,
@@ -293,7 +254,7 @@ router.post("/create", verifyToken, (req, res) => {
             ex.terms_payment || null, ex.terms_payment_custom || null, ex.terms_warranty || null,
             ex.hsn_sac_code || null, ex.supplier_branch || null,
             ex.bank_details_id || null, ex.bank_company || null, ex.bank_name || null, ex.bank_account || null, ex.bank_ifsc || null, ex.bank_branch || null, ex.custom_terms || null,
-            ex.gst_mode || "Exclusive", req.user.id
+            ex.gst_mode || "Exclusive", newStatus, req.user.id
           ],
           (err, quotationResult) => {
             if (err) {
@@ -316,24 +277,28 @@ router.post("/create", verifyToken, (req, res) => {
                 db.commit(err => {
                   if (err) return db.rollback(() => res.status(500).json(err));
 
-                  // DISABLED: Old notification system
-                  /*
-                  const notificationIO = getNotificationIO();
-                  if (notificationIO) {
-                    const time = new Date().toLocaleString();
-                    notificationIO.emitNotification("proposal_created", {
-                      id: quotationId,
-                      referenceNo: refNo,
-                      customerName: customer.customer_name,
-                      clientCompany: ex.client_company || customer.customer_name,
-                      grandTotal: q.grand_total || 0,
-                      createdBy: ex.exec_name || "Employee",
-                      createdAt: time,
-                      type: "proposal"
-                    }, null, true);
+                  // Also save/update to clients table asynchronously for cross-module reuse
+                  if (customer.mobile_number) {
+                    db.query("SELECT id FROM clients WHERE phone = ?", [customer.mobile_number], (cErr, clientRows) => {
+                      if (!cErr && clientRows.length === 0) {
+                        db.query(
+                          `INSERT INTO clients (name, company_name, email, phone, gst_number, address, state, pincode) VALUES (?,?,?,?,?,?,?,?)`,
+                          [customer.customer_name, ex.client_company || customer.customer_name, customer.email, customer.mobile_number, customer.gst_number || null, ex.client_address1 || null, ex.client_state || null, ex.client_pincode || null],
+                          (insErr) => { if (insErr) console.error("Client INSERT error:", insErr); }
+                        );
+                      } else if (!cErr && clientRows.length > 0) {
+                        db.query(
+                          `UPDATE clients SET name=?, company_name=?, email=?, gst_number=?, address=?, state=?, pincode=? WHERE id=?`,
+                          [customer.customer_name, ex.client_company || customer.customer_name, customer.email, customer.gst_number || null, ex.client_address1 || null, ex.client_state || null, ex.client_pincode || null, clientRows[0].id],
+                          (updErr) => { if (updErr) console.error("Client UPDATE error:", updErr); }
+                        );
+                      }
+                    });
                   }
-                  */
 
+                  if ((newStatus || "").toLowerCase() === "billed") {
+                    handleQuotationTargetSync(quotationId, "Pending", newStatus, req.user.id);
+                  }
                   res.status(201).json({ message: "Quotation Created Successfully", quotationId, reference_no: refNo });
                 });
               }
@@ -367,12 +332,14 @@ router.put("/:id", verifyToken, (req, res) => {
       err => {
         if (err) return db.rollback(() => res.status(500).json(err));
 
-        // 2. Get current quotation to find parent_id and version
-        db.query(`SELECT customer_id, parent_id, version, reference_no FROM quotations WHERE id=?`, [id], (err, rows) => {
+        // 2. Get current quotation to find parent_id, version, and status
+        db.query(`SELECT customer_id, parent_id, version, reference_no, status FROM quotations WHERE id=?`, [id], (err, rows) => {
           if (err) return db.rollback(() => res.status(500).json(err));
           if (!rows.length) return db.rollback(() => res.status(404).json({ message: "Quotation not found" }));
 
           const current = rows[0];
+          const currentStatus = current.status || "Pending";
+          const newStatus = q.status || ex.status || currentStatus;
           // The root id is either parent_id (if already a revision) or id itself
           const rootId = current.parent_id || id;
 
@@ -399,8 +366,8 @@ router.put("/:id", verifyToken, (req, res) => {
                   terms_payment, terms_payment_custom, terms_warranty,
                   hsn_sac_code, supplier_branch,
                   bank_details_id, bank_company, bank_name, bank_account, bank_ifsc, bank_branch, custom_terms,
-                  gst_mode, parent_id, version, is_latest, created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                  gst_mode, status, parent_id, version, is_latest, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
                   [
                     current.customer_id, quotationDate,
                     q.total_cgst || 0, q.total_sgst || 0, q.total_igst || 0, q.subtotal || 0,
@@ -415,7 +382,7 @@ router.put("/:id", verifyToken, (req, res) => {
                     ex.terms_payment || null, ex.terms_payment_custom || null, ex.terms_warranty || null,
                     ex.hsn_sac_code || null, ex.supplier_branch || null,
                     ex.bank_details_id || null, ex.bank_company || null, ex.bank_name || null, ex.bank_account || null, ex.bank_ifsc || null, ex.bank_branch || null, ex.custom_terms || null,
-                    ex.gst_mode || "Exclusive", rootId, newVersion, 1, req.user.id
+                    ex.gst_mode || "Exclusive", newStatus, rootId, newVersion, 1, req.user.id
                   ],
                   (err, result) => {
                     if (err) {
@@ -439,6 +406,7 @@ router.put("/:id", verifyToken, (req, res) => {
                         }
                         db.commit(err => {
                           if (err) return db.rollback(() => res.status(500).json(err));
+                          handleQuotationTargetSync(newId, currentStatus, newStatus, req.user.id);
                           res.json({ message: "New version saved", newId, version: newVersion });
                         });
                       }
@@ -490,13 +458,15 @@ router.delete("/:id", verifyToken, isAdmin, (req, res) => {
     }
 
     // Check ownership
-    db.query("SELECT created_by FROM quotations WHERE id = ?", [id], (err, results) => {
+    db.query("SELECT created_by, status FROM quotations WHERE id = ?", [id], (err, results) => {
       if (err) return db.rollback(() => res.status(500).json(err));
       if (results.length === 0) return db.rollback(() => res.status(404).json({ message: "Not found" }));
 
       if (req.user.role !== 'admin' && results[0].created_by !== req.user.id) {
         return db.rollback(() => res.status(403).json({ message: "Access denied" }));
       }
+      const oldStatus = results[0].status;
+      const createdBy = results[0].created_by;
 
       // delete items first
       db.query(
@@ -530,6 +500,7 @@ router.delete("/:id", verifyToken, isAdmin, (req, res) => {
                   );
                 }
 
+                handleQuotationTargetSync(id, oldStatus, "Deleted", createdBy);
                 res.json({ message: "Quotation deleted successfully" });
               });
             }
@@ -652,19 +623,19 @@ router.post("/send-email/:id", verifyToken, (req, res) => {
 });
 
 const handleQuotationTargetSync = (quotationId, oldStatus, newStatus, createdByUserId) => {
-  if (oldStatus === newStatus) return;
+  if ((oldStatus || "").toLowerCase().trim() === (newStatus || "").toLowerCase().trim()) return;
 
-  const isOldBilled = (oldStatus || "").toLowerCase() === "billed";
-  const isNewBilled = (newStatus || "").toLowerCase() === "billed";
+  const isOldBilled = (oldStatus || "").toLowerCase().trim() === "billed";
+  const isNewBilled = (newStatus || "").toLowerCase().trim() === "billed";
 
   if (isOldBilled === isNewBilled) return;
 
   // Fetch quotation + full user name (first + last) to match task_targets.user_name
   db.query(
-    `SELECT q.grand_total, q.reference_no, q.quotation_date,
+    `SELECT q.grand_total, q.reference_no, q.quotation_date, q.exec_name, q.created_by,
             u.first_name, u.last_name, u.id AS user_id
      FROM quotations q
-     JOIN users u ON q.created_by = u.id
+     LEFT JOIN users u ON q.created_by = u.id
      WHERE q.id = ?`,
     [quotationId],
     (err, rows) => {
@@ -673,38 +644,46 @@ const handleQuotationTargetSync = (quotationId, oldStatus, newStatus, createdByU
         return;
       }
 
-      const { grand_total, reference_no, quotation_date, first_name, last_name, user_id: quoteCreatorId } = rows[0];
+      const { grand_total, reference_no, quotation_date, exec_name, first_name, last_name, user_id, created_by } = rows[0];
+      const quoteCreatorId = user_id || created_by || createdByUserId;
       const fullName = `${first_name || ""} ${last_name || ""}`.trim();
+      const execNameClean = (exec_name || "").trim();
+      const firstNameClean = (first_name || "").trim();
       const amount = Number(grand_total || 0);
 
-      // Use quotation_date month if available, else current month
-      const syncMonth = quotation_date
-        ? new Date(quotation_date).toISOString().slice(0, 7)
-        : new Date().toISOString().slice(0, 7);
+      // Extract month YYYY-MM safely
+      let syncMonth = new Date().toISOString().slice(0, 7);
+      if (quotation_date) {
+        const dStr = quotation_date.toString();
+        if (dStr.length >= 7) {
+          syncMonth = dStr.slice(0, 7);
+        }
+      }
 
-      // Try matching by user_id first, then full name, then first name alone
+      // Try matching target by user_id first, then full name, exec_name, or first_name
       db.query(
         `SELECT id, user_name, monthly_target FROM task_targets
-         WHERE user_id = ? OR user_name = ? OR user_name = ?
+         WHERE user_id = ? OR user_name = ? OR (user_name = ? AND ? != '') OR (user_name = ? AND ? != '')
          ORDER BY CASE WHEN user_id = ? THEN 0 WHEN user_name = ? THEN 1 ELSE 2 END
          LIMIT 1`,
-        [quoteCreatorId, fullName, first_name, quoteCreatorId, fullName],
+        [quoteCreatorId, fullName, execNameClean, execNameClean, firstNameClean, firstNameClean, quoteCreatorId, fullName],
         (errTarget, targetRows) => {
           if (errTarget || targetRows.length === 0) {
-            console.warn(`[TargetSync] No target found for user_id=${quoteCreatorId} name="${fullName}" — skipping sync`);
+            console.warn(`[TargetSync] No target found for user_id=${quoteCreatorId} name="${fullName}" exec="${execNameClean}" — skipping sync`);
             return;
           }
 
           const targetId = targetRows[0].id;
           const targetUserName = targetRows[0].user_name;
-          const monthlyTarget = targetRows[0].monthly_target;
+          const monthlyTarget = Number(targetRows[0].monthly_target || 0);
 
           const syncAmount = isNewBilled ? amount : -amount;
+          const refStr = reference_no || `QT-${quotationId}`;
           const updateMsg = isNewBilled
-            ? `Auto-achieved Rs.${amount.toLocaleString()} via quotation Billed (Ref: ${reference_no})`
-            : `Reversed Rs.${amount.toLocaleString()} due to quotation status change from Billed (Ref: ${reference_no})`;
+            ? `Auto-achieved Rs.${amount.toLocaleString()} via quotation Billed (Ref: ${refStr})`
+            : `Reversed Rs.${amount.toLocaleString()} due to quotation status change from Billed (Ref: ${refStr})`;
 
-          console.log(`[TargetSync] ${isNewBilled ? "Adding" : "Reversing"} Rs.${amount} for ${targetUserName} (${syncMonth}) — ${reference_no}`);
+          console.log(`[TargetSync] ${isNewBilled ? "Adding" : "Reversing"} Rs.${amount} for ${targetUserName} (${syncMonth}) — ${refStr}`);
 
           // Log the update entry
           db.query(
@@ -739,10 +718,10 @@ const handleQuotationTargetSync = (quotationId, oldStatus, newStatus, createdByU
                       const isCompleted = isNewBilled && percentage >= 100;
 
                       const adminMsg = isCompleted
-                        ? `🎯 ${targetUserName} has COMPLETED their target for ${syncMonth}! Achieved ₹${totalAchieved.toLocaleString()} (${percentage}%) via Quotation Billed: ${reference_no}`
+                        ? `🎯 ${targetUserName} has COMPLETED their target for ${syncMonth}! Achieved ₹${totalAchieved.toLocaleString()} (${percentage}%) via Quotation Billed: ${refStr}`
                         : isNewBilled
-                          ? `${targetUserName} auto-achieved ₹${amount.toLocaleString()} (Quotation Billed: ${reference_no}) — ${syncMonth} Total: ₹${totalAchieved.toLocaleString()} (${percentage}%)`
-                          : `${targetUserName} target reversed ₹${amount.toLocaleString()} (Status change: ${reference_no}) — ${syncMonth} Total: ₹${totalAchieved.toLocaleString()} (${percentage}%)`;
+                          ? `${targetUserName} auto-achieved ₹${amount.toLocaleString()} (Quotation Billed: ${refStr}) — ${syncMonth} Total: ₹${totalAchieved.toLocaleString()} (${percentage}%)`
+                          : `${targetUserName} target reversed ₹${amount.toLocaleString()} (Status change: ${refStr}) — ${syncMonth} Total: ₹${totalAchieved.toLocaleString()} (${percentage}%)`;
 
                       db.query(
                         "INSERT INTO admin_notifications (type, user_id, message, related_id, related_type, priority) VALUES (?, ?, ?, ?, ?, ?)",

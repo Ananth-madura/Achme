@@ -198,11 +198,35 @@ router.get("/with-usage", verifyToken, (req, res) => {
   let sql = `
     SELECT
       c.*,
-      COALESCE(SUM(s.total_expenses), 0) as used_total,
-      COUNT(s.id) as service_count,
+      COALESCE(s_sum.used_total, 0) + COALESCE(cr_sum.used_total, 0) as used_total,
+      COALESCE(s_sum.service_count, 0) + COALESCE(cr_sum.service_count, 0) as service_count,
       u.first_name AS creator_name
     FROM contracts c
-    LEFT JOIN amc_alc_services s ON c.id = s.contract_id
+    LEFT JOIN (
+      SELECT 
+        contract_id,
+        COALESCE(SUM(total_expenses), 0) as used_total,
+        COUNT(*) as service_count
+      FROM amc_alc_services
+      GROUP BY contract_id
+    ) s_sum ON s_sum.contract_id = c.id
+    LEFT JOIN (
+      SELECT 
+        cnt_id,
+        COALESCE(SUM(expenses), 0) as used_total,
+        COUNT(*) as service_count
+      FROM (
+        SELECT 
+          c_sub.id as cnt_id,
+          COALESCE(NULLIF(cr.total_expenses, 0), cr.invoice_value, 0) as expenses
+        FROM call_reports cr
+        JOIN contracts c_sub ON (
+          (cr.customer_id IS NOT NULL AND cr.customer_id != '' AND CAST(cr.customer_id AS CHAR) = CAST(c_sub.id AS CHAR))
+          OR (cr.contract_title IS NOT NULL AND cr.contract_title != '' AND LOWER(TRIM(cr.contract_title)) = LOWER(TRIM(c_sub.contract_title)))
+        )
+      ) cr_sub
+      GROUP BY cnt_id
+    ) cr_sum ON cr_sum.cnt_id = c.id
     LEFT JOIN users u ON u.id = c.created_by`;
   
   const params = [];
@@ -227,7 +251,7 @@ router.get("/with-usage", verifyToken, (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     const contracts = rows.map(c => ({
       ...c,
-      remaining: parseFloat(c.amount_value) - parseFloat(c.used_total || 0)
+      remaining: parseFloat(c.amount_value || 0) - parseFloat(c.used_total || 0)
     }));
     res.json(contracts);
   });
@@ -241,16 +265,54 @@ router.get("/usage/:id", verifyToken, (req, res) => {
   let sql = `
     SELECT
       c.*,
-      COALESCE(SUM(s.petrol_charges), 0) as used_petrol,
-      COALESCE(SUM(s.spare_parts_price), 0) as used_spare_parts,
-      COALESCE(SUM(s.labour_charges), 0) as used_labour,
-      COALESCE(SUM(s.total_expenses), 0) as used_total,
-      COUNT(s.id) as service_count
+      COALESCE(s_sum.petrol, 0) + COALESCE(cr_sum.petrol, 0) as used_petrol,
+      COALESCE(s_sum.spare, 0) + COALESCE(cr_sum.spare, 0) as used_spare_parts,
+      COALESCE(s_sum.labour, 0) + COALESCE(cr_sum.labour, 0) as used_labour,
+      COALESCE(s_sum.used_total, 0) + COALESCE(cr_sum.used_total, 0) as used_total,
+      COALESCE(s_sum.service_count, 0) + COALESCE(cr_sum.service_count, 0) as service_count,
+      u.first_name AS creator_name
     FROM contracts c
-    LEFT JOIN amc_alc_services s ON c.id = s.contract_id
+    LEFT JOIN (
+      SELECT 
+        contract_id,
+        COALESCE(SUM(petrol_charges), 0) as petrol,
+        COALESCE(SUM(spare_parts_price), 0) as spare,
+        COALESCE(SUM(labour_charges), 0) as labour,
+        COALESCE(SUM(total_expenses), 0) as used_total,
+        COUNT(*) as service_count
+      FROM amc_alc_services
+      WHERE contract_id = ?
+      GROUP BY contract_id
+    ) s_sum ON s_sum.contract_id = c.id
+    LEFT JOIN (
+      SELECT 
+        cnt_id,
+        COALESCE(SUM(petrol), 0) as petrol,
+        COALESCE(SUM(spare), 0) as spare,
+        COALESCE(SUM(labour), 0) as labour,
+        COALESCE(SUM(expenses), 0) as used_total,
+        COUNT(*) as service_count
+      FROM (
+        SELECT 
+          c_sub.id as cnt_id,
+          COALESCE(cr.petrol_charges, 0) as petrol,
+          COALESCE(cr.spare_parts_price, 0) as spare,
+          COALESCE(cr.labour_charges, 0) as labour,
+          COALESCE(NULLIF(cr.total_expenses, 0), cr.invoice_value, 0) as expenses
+        FROM call_reports cr
+        JOIN contracts c_sub ON (
+          c_sub.id = ? AND (
+            (cr.customer_id IS NOT NULL AND cr.customer_id != '' AND CAST(cr.customer_id AS CHAR) = CAST(c_sub.id AS CHAR))
+            OR (cr.contract_title IS NOT NULL AND cr.contract_title != '' AND LOWER(TRIM(cr.contract_title)) = LOWER(TRIM(c_sub.contract_title)))
+          )
+        )
+      ) cr_sub
+      GROUP BY cnt_id
+    ) cr_sum ON cr_sum.cnt_id = c.id
+    LEFT JOIN users u ON u.id = c.created_by
     WHERE c.id = ?`;
   
-  const params = [id];
+  const params = [id, id, id];
   if (role === "employee") {
     sql += ` AND (
       c.created_by = ?
@@ -272,7 +334,7 @@ router.get("/usage/:id", verifyToken, (req, res) => {
     if (err) return res.status(500).json({ error: err.message });
     if (rows.length === 0) return res.status(404).json({ error: "Contract not found" });
     const contract = rows[0];
-    contract.remaining = parseFloat(contract.amount_value) - parseFloat(contract.used_total);
+    contract.remaining = parseFloat(contract.amount_value || 0) - parseFloat(contract.used_total || 0);
     res.json(contract);
   });
 });

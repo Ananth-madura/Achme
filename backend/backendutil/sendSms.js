@@ -1,18 +1,19 @@
 const nodemailer = require("nodemailer");
 const db = require("../config/database");
-const { getTransporterForUser } = require("./emailConfig");
+const { getTransporterForUser, SMTP_TIMEOUTS } = require("./emailConfig");
 
 function createTransporter() {
+  const emailPass = process.env.EMAIL_PASS ? process.env.EMAIL_PASS.replace(/\s+/g, '') : '';
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 587,
     secure: false,
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      pass: emailPass,
     },
     tls: { rejectUnauthorized: false },
-    connectionTimeout: 10000,
+    ...SMTP_TIMEOUTS,
   });
 }
 
@@ -20,9 +21,9 @@ let transporter = createTransporter();
 
 transporter.verify((error) => {
   if (error) {
-    console.error("OTP email transporter verification failed:", error.message);
+    console.warn("⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details:", error.message);
   } else {
-    console.log("OTP email transporter is ready");
+    console.log("✅ OTP email transporter is ready");
   }
 });
 

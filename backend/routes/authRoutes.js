@@ -27,6 +27,14 @@ router.get("/users", verifyToken, isAdmin, (req, res) => {
   });
 });
 
+/* ================= GET PENDING USERS ================= */
+router.get("/pending-users", verifyToken, isAdmin, (req, res) => {
+  db.query("SELECT id, first_name, email, role, status, created_at FROM users WHERE status = 'pending' ORDER BY created_at DESC", (err, rows) => {
+    if (err) return res.status(500).json({ message: "Failed to fetch pending users" });
+    res.json({ users: rows });
+  });
+});
+
 /* ================= SEND EMAIL OTP ================= */
 router.post("/send-email-otp", (req, res) => {
   const email = req.body.email?.trim().toLowerCase();
@@ -203,8 +211,8 @@ router.post("/login", (req, res) => {
     `SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.status, u.user_password, u.two_factor_enabled, tm.job_title, tm.emp_role 
      FROM users u 
      LEFT JOIN teammember tm ON u.id = tm.user_id 
-     WHERE u.email=? OR u.emp_id=?`,
-    [emailLower, emailLower],
+     WHERE u.email=? OR u.emp_id=? OR tm.emp_id=?`,
+    [emailLower, emailLower, emailLower],
     (err, rows) => {
       if (err || !rows.length) {
         return res.status(404).json({ message: "No account found with this email or employee code" });
@@ -271,8 +279,8 @@ router.post("/create-user", verifyToken, isAdmin, (req, res) => {
   bcrypt.hash(user_password, 10, (err, hash) => {
     if (err) return res.status(500).json({ message: "Password hash failed" });
 
-    db.query(`INSERT INTO users (first_name, last_name, email, user_password, role, status) VALUES (?, ?, ?, ?, ?, ?)`,
-      [first_name, last_name || "", email.toLowerCase(), hash, role, "active"], (err2, result) => {
+    db.query(`INSERT INTO users (first_name, last_name, email, emp_id, user_password, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [first_name, last_name || "", email.toLowerCase(), emp_id || null, hash, role, "active"], (err2, result) => {
         if (err2) {
           if (err2.code === "ER_DUP_ENTRY") return res.status(400).json({ message: "Email already exists" });
           return res.status(500).json({ message: "User creation failed" });
@@ -878,7 +886,8 @@ router.post("/send-test-email", verifyToken, async (req, res) => {
         user: email_user,
         pass: finalPass
       },
-      tls: { rejectUnauthorized: false }
+      tls: { rejectUnauthorized: false },
+      ...require("../backendutil/emailConfig").SMTP_TIMEOUTS
     });
 
     const mailOptions = {

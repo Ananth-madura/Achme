@@ -58,7 +58,7 @@ const INDIAN_STATES = [
 const VALIDITY_OPTIONS = ["2 days", "5 days", "10 days", "15 days", "30 days"];
 const PAYMENT_OPTIONS = ["100% Advance", "Payment Against Delivery", "15 Days", "30 Days", "45 Days", "Custom"];
 const WARRANTY_OPTIONS = ["No Warranty", "Testing Warranty", "1 Month", "3 Months", "6 Months", "12 Months", "24 Months", "36 Months", "OEM Warranty", "Supplier Warranty", "OEM Hardware Warranty", "No Software Warranty"];
-const GST_MODES = ["Exclusive", "Inclusive", "Exempt"];
+const GST_MODES = ["Exclusive", "Inclusive", "Exempt", "Tax Extra"];
 const STATUS_OPTIONS = ["Send", "Pending", "Close", "Billed", "Cancel"];
 const STATUS_COLORS = {
     Send: { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
@@ -144,7 +144,7 @@ const ServiceEstimation = () => {
     const [creatorFilter, setCreatorFilter] = useState("");
     const [mailOpen, setMailOpen] = useState(false);
     const [mailTo, setMailTo] = useState("");
-    const [mailCc, setMailCc] = useState("");
+    const [mailCc, setMailCc] = useState("Kk@achmecommunication.com");
     const [mailSubject, setMailSubject] = useState("");
     const [mailContent, setMailContent] = useState("");
     const [mailSending, setMailSending] = useState(false);
@@ -473,8 +473,8 @@ const ServiceEstimation = () => {
                 exec_name: h.exec_name || getCurrentExec().name,
                 exec_phone: h.exec_phone || getCurrentExec().phone,
                 exec_email: h.exec_email || getCurrentExec().email,
-                terms_general: !!h.terms_general,
-                terms_tax: !!h.terms_tax,
+                terms_general: h.terms_general === 1 || h.terms_general === true || h.terms_general === "1" || h.terms_general === "true",
+                terms_tax: h.terms_tax === 1 || h.terms_tax === true || h.terms_tax === "1" || h.terms_tax === "true",
                 terms_project_period: h.terms_project_period || "30-60 days from Purchase Order date",
                 terms_validity: h.terms_validity || "15 days",
                 terms_separate_orders: termsSep,
@@ -508,7 +508,7 @@ const ServiceEstimation = () => {
 
         const gstMode = extra.gst_mode || "Exclusive";
 
-        if (gstMode === "Exempt") {
+        if (gstMode === "Exempt" || gstMode === "Tax Extra") {
             const subtotal = items.reduce((acc, i) => acc + (i.price * (i.qty || i.quantity || 0)), 0);
             const totalDiscount = items.reduce((acc, i) => acc + (i.discount || 0), 0);
             return { subtotal, total_discount: totalDiscount, total_cgst: 0, total_sgst: 0, total_igst: 0, grand_total: subtotal - totalDiscount };
@@ -533,15 +533,13 @@ const ServiceEstimation = () => {
             totalDiscount += discountAmount;
 
             if (gstMode === "Inclusive") {
-                const taxableValue = itemSubtotal / (1 + taxRate / 100);
-                const taxAmount = itemSubtotal - taxableValue;
-                const discTaxRatio = discountAmount / itemSubtotal;
-                const actualTax = taxAmount * (1 - discTaxRatio);
+                const taxableAmount = itemSubtotal - discountAmount;
+                const taxAmount = (taxableAmount * taxRate) / 100;
                 if (isSameState) {
-                    totalCGST += actualTax / 2;
-                    totalSGST += actualTax / 2;
+                    totalCGST += taxAmount / 2;
+                    totalSGST += taxAmount / 2;
                 } else {
-                    totalIGST += actualTax;
+                    totalIGST += taxAmount;
                 }
             } else {
                 const taxableAmount = itemSubtotal - discountAmount;
@@ -660,16 +658,8 @@ const ServiceEstimation = () => {
             console.error("Error checking SMTP config before sending mail:", e);
         }
         const inv = findInvoice(id);
-        let adminEmail = "";
-        try {
-            const adminRes = await axios.get(`${API}/api/auth/admin-email`, getAuthConfig());
-            adminEmail = adminRes.data.email || "";
-        } catch (e) {
-            console.error("Error fetching admin email:", e);
-            adminEmail = "admin@achme.com";
-        }
         setMailTo(inv?.email || "");
-        setMailCc(adminEmail);
+        setMailCc("Kk@achmecommunication.com");
         setMailSubject(`Service Estimation ${formatSENumber(id, inv?.invoice_date)}`);
         setMailContent("");
         setMailOpen(true);
@@ -679,7 +669,7 @@ const ServiceEstimation = () => {
         if (!mailTo) return alert("Please enter recipient email");
         setMailSending(true);
         try {
-            await axios.post(`${API}/api/service-estimation/send-email/${id}`, { to: mailTo, cc: mailCc, subject: mailSubject, body: mailContent }, getAuthConfig());
+            await axios.post(`${API}/api/service-estimation/send-email/${id}`, { to: mailTo, cc: "Kk@achmecommunication.com", subject: mailSubject, body: mailContent }, getAuthConfig());
             alert("Email sent successfully"); setMailOpen(false);
         } catch (error) { alert(error.response?.data?.message || "Failed to send email"); }
         finally { setMailSending(false); }
@@ -1367,7 +1357,7 @@ const ServiceEstimation = () => {
                                     const same = branchState === clientState && clientState !== "";
 
                                     const gstBreakdown = [];
-                                    if (gstMode !== "Exempt" && gstMode !== "Without GST") {
+                                    if (gstMode !== "Exempt" && gstMode !== "Tax Extra" && gstMode !== "Without GST") {
                                         const groups = {};
                                         items.forEach(item => {
                                             const taxRate = Number(item.tax) || 0;
@@ -1379,8 +1369,7 @@ const ServiceEstimation = () => {
 
                                             let gstAmount = 0;
                                             if (gstMode === "Inclusive") {
-                                                const taxableVal = base / (1 + taxRate / 100);
-                                                gstAmount = base - taxableVal;
+                                                gstAmount = (base * taxRate) / 100;
                                             } else {
                                                 gstAmount = (base * taxRate) / 100;
                                             }
@@ -1407,11 +1396,16 @@ const ServiceEstimation = () => {
                                         });
                                     }
 
+                                    // For Inclusive: Subtotal = taxable base (price minus embedded tax), GST shown separately, Total = entered price
+                                    // For Exclusive: Subtotal = entered price, GST added on top, Total = subtotal + GST
+                                    // For Exempt: Subtotal = entered price, no GST, Total = subtotal
+                                    const displaySubtotal = gstMode === "Inclusive" ? taxableValue : t.subtotal - t.total_discount;
+                                    const totalTax = t.total_cgst + t.total_sgst + t.total_igst;
+
                                     return (<>
-                                        <div className="flex justify-between text-sm text-gray-600 py-1"><span>Subtotal</span><span className="font-medium">&#8377;{t.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-                                        <div className="flex justify-between text-sm text-gray-600 py-1"><span>Discount</span><span className="font-medium">-&#8377;{t.total_discount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
-                                        {gstMode === "Inclusive" && (
-                                            <div className="flex justify-between text-sm py-1 text-gray-600"><span>Taxable Value</span><span className="font-medium">&#8377;{taxableValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                                        <div className="flex justify-between text-sm text-gray-600 py-1"><span>Subtotal</span><span className="font-medium">&#8377;{displaySubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+                                        {t.total_discount > 0 && (
+                                            <div className="flex justify-between text-sm text-gray-600 py-1"><span>Discount</span><span className="font-medium">-&#8377;{t.total_discount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                                         )}
                                         {showBreakdown ? (
                                             gstBreakdown.map((b, idx) => (
@@ -1437,6 +1431,9 @@ const ServiceEstimation = () => {
                                                     <div className="flex justify-between text-sm py-1 text-gray-600"><span>IGST</span><span className="font-medium">&#8377;{t.total_igst.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                                                 ) : null}
                                             </>
+                                        )}
+                                        {gstMode !== "Exempt" && totalTax > 0 && (
+                                            <div className="flex justify-between text-sm py-1 text-green-700 font-medium"><span>Total GST</span><span>&#8377;{totalTax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                                         )}
                                         <div className="flex justify-between border-t border-gray-200 pt-2 mt-1 text-lg font-bold text-blue-700"><span>Grand Total</span><span>&#8377;{t.grand_total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
                                     </>);
@@ -1491,13 +1488,13 @@ const ServiceEstimation = () => {
                                     <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">GST Mode</label>
                                     <div className="flex flex-wrap gap-3">
                                         {GST_MODES.map(mode => (
-                                            <label key={mode} className={`flex items-center gap-2 cursor-pointer border rounded-lg px-3 py-2 transition text-sm ${extra.gst_mode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200"}`}>
-                                                <input type="radio" name="gst_mode_se" value={mode} checked={extra.gst_mode === mode} onChange={e => setExtra(ex => ({ ...ex, gst_mode: e.target.value }))} className="accent-blue-600" />
-                                                <span>{mode} — {mode === "Exclusive" ? "GST added to price" : mode === "Inclusive" ? "GST included in price" : "No GST charged"}</span>
+                                            <label key={mode} className={`flex items-center gap-2 cursor-pointer border rounded-lg px-3 py-2 transition text-sm ${extra.gst_mode === mode ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold" : "border-gray-200"}`}>
+                                                <input type="radio" name="gst_mode_se" value={mode} checked={extra.gst_mode === mode} onChange={e => setExtra(ex => ({ ...ex, gst_mode: e.target.value, terms_tax: e.target.value === "Exempt" }))} className="accent-blue-600" />
+                                                <span>{mode === "Exclusive" ? "Exclusive (GST Extra)" : mode === "Inclusive" ? "Inclusive (GST Included)" : mode === "Tax Extra" ? "Tax Extra (No GST)" : "Tax Exempt (No GST)"}</span>
                                             </label>
                                         ))}
                                     </div>
-                                    {extra.gst_mode !== "Exempt" && (
+                                    {extra.gst_mode !== "Exempt" && extra.gst_mode !== "Tax Extra" && (
                                         <div className="mt-3">
                                             <label className="flex items-center gap-2 cursor-pointer">
                                                 <input
@@ -1742,7 +1739,13 @@ const ServiceEstimation = () => {
                             <label className="text-xs font-bold text-gray-500 uppercase">To (Email)</label>
                             <input type="email" value={mailTo} onChange={e => setMailTo(e.target.value)} className="border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-100" placeholder="recipient@email.com" />
                         </div>
-                        {/* CC admin email sent silently — not shown to user */}
+                        <div className="flex flex-col gap-1">
+                            <label className="text-xs font-bold text-gray-500 uppercase flex items-center justify-between">
+                                <span>CC (Email)</span>
+                                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">Default / Non-editable</span>
+                            </label>
+                            <input type="email" value="Kk@achmecommunication.com" readOnly disabled className="border rounded-lg px-4 py-2 outline-none bg-gray-100 text-gray-600 cursor-not-allowed font-medium" />
+                        </div>
                         <div className="flex flex-col gap-1">
                             <label className="text-xs font-bold text-gray-500 uppercase">Subject</label>
                             <input type="text" value={mailSubject} onChange={e => setMailSubject(e.target.value)} className="border rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-100" />

@@ -4,11 +4,11 @@ import { API } from "../config/api";
 const socketUrl = API || window.location.origin;
 const socketOptions = {
   path: "/socket.io",
-  transports: ["websocket", "polling"],
+  transports: ["polling", "websocket"],
   reconnection: true,
-  reconnectionAttempts: Infinity,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 2000,
+  reconnectionDelayMax: 10000,
 };
 
 const socket = io(socketUrl, socketOptions);

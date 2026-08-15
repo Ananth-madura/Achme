@@ -353,7 +353,7 @@ if not exist "package.json" (
     echo  [FAIL] frontend\package.json not found. Wrong project root?
     pause & exit /b 1
 )
-call npm install
+call npm install --legacy-peer-deps
 if errorlevel 1 (
     echo  [FAIL] npm install failed in frontend\
     pause & exit /b 1
@@ -438,7 +438,8 @@ echo             proxy_read_timeout     120s;
 echo             client_max_body_size   50M;
 echo         }
 echo.
-echo         location /uploads/ {
+echo         # ^^~ so this wins over the static-asset regex location below (.jpeg etc.^)
+echo         location ^^~ /uploads/ {
 echo             proxy_pass http://achme_backend/uploads/;
 echo             proxy_http_version 1.1;
 echo             proxy_set_header Host              $host;

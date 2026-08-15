@@ -1,5 +1,6 @@
 import logoImg from "../images/achme2logo-high.jpeg";
 import brandLogo from "../images/achme-logo-high.jpeg";
+import { gstSummary } from "./invoicecal";
 
 export function downloadAsHtml(data, type) {
   const TYPE_MAP = {
@@ -48,12 +49,12 @@ export function downloadAsHtml(data, type) {
   else if (h.tax_type === "GST5") taxRate = 5;
   else if (h.tax_type === "NONE" || h.tax_type === "Without GST") taxRate = 0;
 
-  const subtotal = Number(h.subtotal || 0) || data.reduce((sum, r) => sum + (Number(r.quantity || 0) * Number(r.price || 0)), 0);
-  const totalDiscount = Number(h.total_discount || 0);
+  const summary = gstSummary(h, data);
+  const totalDiscount = summary.discount;
   const totalCGST = Number(h.total_cgst || 0);
   const totalSGST = Number(h.total_sgst || 0);
   const totalIGST = Number(h.total_igst || 0);
-  const grandTotal = Number(h.grand_total || 0) || (subtotal - totalDiscount + totalCGST + totalSGST + totalIGST);
+  const grandTotal = summary.grandTotal;
   const hasGST = taxRate > 0;
   const hasHSN = data.some((r) => r.hsn_sac);
   const hasBrandModel = data.some((r) => r.brand_model && String(r.brand_model).trim() !== "");
@@ -97,7 +98,16 @@ export function downloadAsHtml(data, type) {
 
   const terms = [];
   if (h.terms_general) { /* General T&C — checkbox only, no body text */ }
-  if (h.terms_tax) terms.push("Prices quoted are exclusive of Sales and Service Tax.");
+  const mode = h.gst_mode || (h.terms_tax === 1 || h.terms_tax === true || h.terms_tax === "1" || h.terms_tax === "true" ? "Exempt" : "Exclusive");
+  if (mode === "Inclusive") {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  } else if (mode === "Exempt") {
+    terms.push("Prices quoted are exempt of Sales and Service Tax.");
+  } else if (mode === "Tax Extra") {
+    terms.push("TAX EXTRA - Prices quoted are exclusive of Sales and Service Tax.");
+  } else {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  }
   if (h.terms_project_period) terms.push(`Project Period: ${esc(h.terms_project_period)}`);
   if (h.terms_validity) terms.push(`Quote valid for ${esc(h.terms_validity)} from quotation date.`);
   if (h.terms_payment) terms.push(`Payment Terms: ${esc(h.terms_payment === "Custom" ? h.terms_payment_custom : h.terms_payment)}`);
@@ -138,11 +148,7 @@ export function downloadAsHtml(data, type) {
     </tr>`;
   }).join("");
 
-  const dlGstMode = h.gst_mode || "Exclusive";
-  const dlGrossBase = subtotal - totalDiscount;
-  const dlTaxBase = dlGstMode === "Inclusive"
-    ? Math.max(dlGrossBase - totalCGST - totalSGST - totalIGST, 0)
-    : dlGrossBase;
+  const dlGstMode = summary.mode;
 
   let showBreakdown = true;
   if (h.terms_separate_orders) {
@@ -170,8 +176,7 @@ export function downloadAsHtml(data, type) {
 
         let gstAmount = 0;
         if (dlGstMode === "Inclusive") {
-          const taxableValue = base / (1 + taxRate / 100);
-          gstAmount = base - taxableValue;
+          gstAmount = (base * taxRate) / 100;
         } else {
           gstAmount = (base * taxRate) / 100;
         }
@@ -221,10 +226,14 @@ export function downloadAsHtml(data, type) {
     }
   }
 
+  const displaySubtotal = summary.subtotal;
+  const totalTaxAmount = summary.gstAmount;
+
   const summaryRows = `
-    <tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;">Subtotal</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;">${fmtNum(subtotal)}</td></tr>
+    <tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;">Subtotal</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;">${fmtNum(displaySubtotal)}</td></tr>
     ${totalDiscount > 0 ? `<tr><td style="padding:10px 8px;font-size:12px;color:#64748b;">Discount</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;">${fmtNum(totalDiscount)}</td></tr>` : ""}
     ${gstRows}
+    ${dlGstMode !== "Exempt" && totalTaxAmount > 0 ? `<tr><td style="padding:10px 8px;font-size:12px;color:#166534;font-weight:600;">Total GST</td><td style="padding:10px 8px;font-size:12px;color:#166534;text-align:right;font-weight:700;">${fmtNum(totalTaxAmount)}</td></tr>` : ""}
     <tr><td style="padding:10px 8px;font-size:14px;color:#1e3a8a;font-weight:700;background:#f0f4ff;">GRAND TOTAL</td><td style="padding:10px 8px;font-size:14px;color:#1e3a8a;text-align:right;font-weight:700;background:#f0f4ff;">${fmtNum(grandTotal)}</td></tr>
     <tr><td colspan="2" style="padding:4px 8px 8px 8px;font-size:10px;color:#64748b;font-style:italic;text-align:right;"><strong>Amount in Words:</strong> ${numberToWords(grandTotal)}</td></tr>`;
 

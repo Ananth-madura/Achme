@@ -9,7 +9,7 @@ const UOM_OPTIONS = ["Nos", "Units", "Pieces", "Boxes", "Sets", "Meters", "Kg", 
 const VALIDITY_OPTIONS = ["2 days", "5 days", "10 days", "15 days", "30 days"];
 const PAYMENT_OPTIONS = ["100% Advance", "Payment Against Delivery", "15 Days", "30 Days", "45 Days", "Custom"];
 const WARRANTY_OPTIONS = ["No Warranty", "Testing Warranty", "1 Month", "3 Months", "6 Months", "12 Months", "24 Months", "36 Months", "OEM Warranty", "Supplier Warranty", "OEM Hardware Warranty", "No Software Warranty"];
-const GST_MODES = ["Exclusive", "Inclusive", "Exempt"];
+const GST_MODES = ["Exclusive", "Inclusive", "Exempt", "Tax Extra"];
 
 const SectionTitle = ({ children }) => (
   <div className="flex items-center gap-2 mb-4 mt-6">
@@ -172,7 +172,7 @@ const Estimate = () => {
 
     const gstMode = extra.gst_mode || "Exclusive";
 
-    if (gstMode === "Exempt") {
+    if (gstMode === "Exempt" || gstMode === "Tax Extra") {
       const subtotal = items.reduce((acc, i) => acc + (i.price * (i.qty || 0)), 0);
       const totalDiscount = items.reduce((acc, i) => acc + (i.discount || 0), 0);
       return { subtotal, total_discount: totalDiscount, total_cgst: 0, total_sgst: 0, total_igst: 0, grand_total: subtotal - totalDiscount };
@@ -194,15 +194,13 @@ const Estimate = () => {
       totalDiscount += discountAmount;
 
       if (gstMode === "Inclusive") {
-        const taxableValue = itemSubtotal / (1 + taxRate / 100);
-        const taxAmount = itemSubtotal - taxableValue;
-        const discTaxRatio = discountAmount / itemSubtotal;
-        const actualTax = taxAmount * (1 - discTaxRatio);
+        const taxableAmount = itemSubtotal - discountAmount;
+        const taxAmount = (taxableAmount * taxRate) / 100;
         if (isSameState) {
-          totalCGST += actualTax / 2;
-          totalSGST += actualTax / 2;
+          totalCGST += taxAmount / 2;
+          totalSGST += taxAmount / 2;
         } else {
-          totalIGST += actualTax;
+          totalIGST += taxAmount;
         }
       } else {
         const taxableAmount = itemSubtotal - discountAmount;
@@ -775,18 +773,22 @@ const Estimate = () => {
                     const cgstPct = taxBase > 0 && t.total_cgst > 0 ? +((t.total_cgst / taxBase) * 100).toFixed(2).replace(/\.?0+$/, '') : 0;
                     const sgstPct = taxBase > 0 && t.total_sgst > 0 ? +((t.total_sgst / taxBase) * 100).toFixed(2).replace(/\.?0+$/, '') : 0;
                     const igstPct = taxBase > 0 && t.total_igst > 0 ? +((t.total_igst / taxBase) * 100).toFixed(2).replace(/\.?0+$/, '') : 0;
+                    // For Inclusive: Subtotal = taxable base (price minus embedded tax), GST shown separately, Total = entered price
+                    // For Exclusive: Subtotal = entered price, GST added on top, Total = subtotal + GST
+                    // For Exempt: Subtotal = entered price, no GST, Total = subtotal
+                    const displaySubtotal = gstMode === "Inclusive" ? taxableValue : t.subtotal - t.total_discount;
+                    const totalTax = t.total_cgst + t.total_sgst + t.total_igst;
                     return (
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm text-gray-600 py-1">
                           <span>Subtotal</span>
-                          <span className="font-medium text-slate-800">&#8377;{t.subtotal.toLocaleString()}</span>
+                          <span className="font-medium text-slate-800">&#8377;{displaySubtotal.toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between text-sm text-gray-600 py-1">
-                          <span>Discount</span>
-                          <span className="font-medium text-slate-800">-&#8377;{t.total_discount.toLocaleString()}</span>
-                        </div>
-                        {gstMode === "Inclusive" && (
-                          <div className="flex justify-between text-sm py-1 text-gray-600"><span>Taxable Value</span><span className="font-medium">&#8377;{taxableValue.toLocaleString()}</span></div>
+                        {t.total_discount > 0 && (
+                          <div className="flex justify-between text-sm text-gray-600 py-1">
+                            <span>Discount</span>
+                            <span className="font-medium text-slate-800">-&#8377;{t.total_discount.toLocaleString()}</span>
+                          </div>
                         )}
                         <div className="flex justify-between text-sm py-1" style={{ color: t.total_cgst > 0 ? "#4b5563" : "#d1d5db" }}>
                           <span>CGST{cgstPct > 0 ? ` (${cgstPct}%)` : ""}</span>
@@ -800,6 +802,12 @@ const Estimate = () => {
                           <span>IGST{igstPct > 0 ? ` (${igstPct}%)` : ""}</span>
                           <span className="font-medium">&#8377;{t.total_igst.toLocaleString()}</span>
                         </div>
+                        {gstMode !== "Exempt" && totalTax > 0 && (
+                          <div className="flex justify-between text-sm py-1 text-green-700 font-medium">
+                            <span>Total GST</span>
+                            <span>&#8377;{totalTax.toLocaleString()}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between border-t border-gray-200 pt-2 mt-1 text-lg font-bold text-blue-700">
                           <span>Grand Total</span>
                           <span>&#8377;{t.grand_total.toLocaleString()}</span>
@@ -855,9 +863,9 @@ const Estimate = () => {
                     <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">GST Mode</label>
                     <div className="flex flex-wrap gap-3">
                       {GST_MODES.map(mode => (
-                        <label key={mode} className={`flex items-center gap-2 cursor-pointer border rounded-lg px-3 py-2 transition text-sm ${extra.gst_mode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200"}`}>
+                        <label key={mode} className={`flex items-center gap-2 cursor-pointer border rounded-lg px-3 py-2 transition text-sm ${extra.gst_mode === mode ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold" : "border-gray-200"}`}>
                           <input type="radio" name="gst_mode_est" value={mode} checked={extra.gst_mode === mode} onChange={e => setExtra(ex => ({ ...ex, gst_mode: e.target.value }))} className="accent-blue-600" />
-                          <span>{mode} — {mode === "Exclusive" ? "GST added to price" : mode === "Inclusive" ? "GST included in price" : "No GST charged"}</span>
+                          <span>{mode === "Exclusive" ? "Exclusive (GST Extra)" : mode === "Inclusive" ? "Inclusive (GST Included)" : mode === "Tax Extra" ? "Tax Extra (No GST)" : "Tax Exempt (No GST)"}</span>
                         </label>
                       ))}
                     </div>

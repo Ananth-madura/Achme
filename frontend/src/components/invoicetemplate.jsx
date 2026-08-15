@@ -4,6 +4,7 @@ import { API } from "../config/api";
 import logoImg from "../images/achme2logo-high.jpeg";
 import brandLogo from "../images/achme-logo-high.jpeg";
 import { BRANCH_DATA, BANK_DETAILS } from "../config/branchConfig";
+import { gstSummary } from "../utils/invoicecal";
 import "../Styles/form-template.css";
 
 const TYPE_MAP = {
@@ -130,17 +131,12 @@ const Invoice = ({ quotationId, type = "quotation", pdfMode = false }) => {
   const docDate = h.invoice_date || h.quotation_date || h.estimate_date;
   const docNumber = `${config.prefix}-${new Date(docDate).getFullYear()}-${String(docId).padStart(3, "0")}`;
 
-  const subtotal = rows.reduce((sum, r) => {
-    const qty = Number(r.quantity || 0);
-    const price = Number(r.price || 0);
-    return sum + qty * price;
-  }, 0);
-
-  const totalDiscount = Number(h.total_discount || 0);
+  const summary = gstSummary(h, rows);
+  const totalDiscount = summary.discount;
   const totalCGST = Number(h.total_cgst || 0);
   const totalSGST = Number(h.total_sgst || 0);
   const totalIGST = Number(h.total_igst || 0);
-  const grandTotal = Number(h.grand_total || 0) || (subtotal - totalDiscount + totalCGST + totalSGST + totalIGST);
+  const grandTotal = summary.grandTotal;
 
   const taxRate = getTaxRate(h);
   const hasGST = taxRate > 0 || totalCGST > 0 || totalSGST > 0 || totalIGST > 0;
@@ -149,13 +145,9 @@ const Invoice = ({ quotationId, type = "quotation", pdfMode = false }) => {
   const showIGST = totalIGST > 0;
   const showDiscount = totalDiscount > 0;
 
-  // Derive actual % from stored amounts for accurate label display
-  // For Inclusive GST, tax base is subtotal minus the tax amounts themselves
-  const gstModeStr = h.gst_mode || "Exclusive";
-  const grossBase = subtotal - totalDiscount;
-  const taxableBase = gstModeStr === "Inclusive"
-    ? Math.max(grossBase - totalCGST - totalSGST - totalIGST, 0)
-    : grossBase;
+  const gstModeStr = summary.mode;
+  const totalTaxAmount = summary.gstAmount;
+  const taxableBase = summary.subtotal;
   const cgstRate = showCGST && taxableBase > 0 ? +((totalCGST / taxableBase) * 100).toFixed(2).replace(/\.?0+$/, '') : taxRate / 2;
   const sgstRate = showSGST && taxableBase > 0 ? +((totalSGST / taxableBase) * 100).toFixed(2).replace(/\.?0+$/, '') : taxRate / 2;
   const igstRate = showIGST && taxableBase > 0 ? +((totalIGST / taxableBase) * 100).toFixed(2).replace(/\.?0+$/, '') : taxRate;
@@ -189,7 +181,7 @@ const Invoice = ({ quotationId, type = "quotation", pdfMode = false }) => {
   const sameState = branchStateForGst === clientStateForGst && clientStateForGst !== "";
 
   const gstBreakdown = [];
-  if (gstModeStr !== "Exempt" && gstModeStr !== "Without GST") {
+  if (gstModeStr !== "Exempt" && gstModeStr !== "Tax Extra" && gstModeStr !== "Without GST") {
     const groups = {};
     rows.forEach(r => {
       const taxRate = Number(r.tax) || 0;
@@ -201,8 +193,7 @@ const Invoice = ({ quotationId, type = "quotation", pdfMode = false }) => {
 
       let gstAmount = 0;
       if (gstModeStr === "Inclusive") {
-        const taxableValue = base / (1 + taxRate / 100);
-        gstAmount = base - taxableValue;
+        gstAmount = (base * taxRate) / 100;
       } else {
         gstAmount = (base * taxRate) / 100;
       }
@@ -261,8 +252,16 @@ const Invoice = ({ quotationId, type = "quotation", pdfMode = false }) => {
 
   const terms = [];
   if (h.terms_general === 1 || h.terms_general === true) { /* General T&C — checkbox only, no body text */ }
-  if (h.terms_tax === 1 || h.terms_tax === true) terms.push("Prices quoted are exclusive of Sales and Service Tax.");
-  if (h.gst_mode) terms.push(`GST: ${h.gst_mode === "Exclusive" ? "GST Extra" : h.gst_mode === "Inclusive" ? "GST Inclusive" : "GST Exempt"}`);
+  const mode = h.gst_mode || (h.terms_tax === 1 || h.terms_tax === true || h.terms_tax === "1" || h.terms_tax === "true" ? "Exempt" : "Exclusive");
+  if (mode === "Inclusive") {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  } else if (mode === "Exempt") {
+    terms.push("Prices quoted are exempt of Sales and Service Tax.");
+  } else if (mode === "Tax Extra") {
+    terms.push("TAX EXTRA - Prices quoted are exclusive of Sales and Service Tax.");
+  } else {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  }
   if (h.terms_project_period) terms.push(`Project Period: ${h.terms_project_period}`);
   if (h.terms_validity) terms.push(`Quote valid for ${h.terms_validity} from quotation date.`);
   if (h.terms_separate_orders) {
@@ -456,74 +455,87 @@ const Invoice = ({ quotationId, type = "quotation", pdfMode = false }) => {
                       {/* SUMMARY */}
                       <div className="ft-summary-box">
                         <table className="ft-summary-table">
-                          <tr>
-                            <td style={{ width: "50%" }}>Subtotal</td>
-                            <td style={{ width: "50%" }}>{fmt(subtotal)}</td>
-                          </tr>
-                          {showDiscount && (
-                            <tr>
-                              <td style={{ width: "50%" }}>Discount</td>
-                              <td style={{ width: "50%" }}>{fmt(totalDiscount)}</td>
-                            </tr>
-                          )}
-                          {showBreakdown ? (
-                            gstBreakdown.map((b, idx) => (
-                              <tr key={idx}>
-                                <td style={{ width: "50%" }}>{b.label}</td>
-                                <td style={{ width: "50%" }}>{fmt(b.amount)}</td>
-                              </tr>
-                            ))
-                          ) : (
-                            <>
-                              {showCGST && showIGST ? (
-                                <>
-                                  <tr>
-                                    <td style={{ width: "50%" }}>CGST</td>
-                                    <td style={{ width: "50%" }}>{fmt(totalCGST)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td style={{ width: "50%" }}>SGST</td>
-                                    <td style={{ width: "50%" }}>{fmt(totalSGST)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td style={{ width: "50%" }}>IGST</td>
-                                    <td style={{ width: "50%" }}>{fmt(totalIGST)}</td>
-                                  </tr>
-                                </>
-                              ) : showCGST || showSGST || (totalIGST === 0 && sameState) ? (
-                                <>
-                                  <tr>
-                                    <td style={{ width: "50%" }}>CGST</td>
-                                    <td style={{ width: "50%" }}>{fmt(totalCGST)}</td>
-                                  </tr>
-                                  <tr>
-                                    <td style={{ width: "50%" }}>SGST</td>
-                                    <td style={{ width: "50%" }}>{fmt(totalSGST)}</td>
-                                  </tr>
-                                </>
-                              ) : showIGST || (totalCGST === 0 && totalSGST === 0 && !sameState) ? (
+                          <tbody>
+                            {(() => {
+                              const displaySubtotal = summary.subtotal;
+                              return (<>
                                 <tr>
-                                  <td style={{ width: "50%" }}>IGST</td>
-                                  <td style={{ width: "50%" }}>{fmt(totalIGST)}</td>
+                                  <td style={{ width: "50%" }}>Subtotal</td>
+                                  <td style={{ width: "50%" }}>{fmt(displaySubtotal)}</td>
                                 </tr>
-                              ) : null}
-                            </>
-                          )}
-                          {!hasGST && (
-                            <tr>
-                              <td style={{ color: "var(--muted)", fontSize: "10px", width: "50%" }}>Without GST</td>
-                              <td style={{ width: "50%" }}></td>
-                            </tr>
-                          )}
-                          <tr className="ft-grand-total">
-                            <td style={{ width: "50%" }}>GRAND TOTAL</td>
-                            <td style={{ width: "50%" }}>{fmt(grandTotal)}</td>
-                          </tr>
-                          <tr>
-                            <td colSpan="2" style={{ fontSize: "10px", color: "#475569", fontStyle: "italic", paddingTop: "6px", textAlign: "right" }}>
-                              <strong>Amount in Words:</strong> {numberToWords(grandTotal)}
-                            </td>
-                          </tr>
+                                {showDiscount && (
+                                  <tr>
+                                    <td style={{ width: "50%" }}>Discount</td>
+                                    <td style={{ width: "50%" }}>{fmt(totalDiscount)}</td>
+                                  </tr>
+                                )}
+                                {showBreakdown ? (
+                                  gstBreakdown.map((b, idx) => (
+                                    <tr key={idx}>
+                                      <td style={{ width: "50%" }}>{b.label}</td>
+                                      <td style={{ width: "50%" }}>{fmt(b.amount)}</td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <>
+                                    {showCGST && showIGST ? (
+                                      <>
+                                        <tr>
+                                          <td style={{ width: "50%" }}>CGST</td>
+                                          <td style={{ width: "50%" }}>{fmt(totalCGST)}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ width: "50%" }}>SGST</td>
+                                          <td style={{ width: "50%" }}>{fmt(totalSGST)}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ width: "50%" }}>IGST</td>
+                                          <td style={{ width: "50%" }}>{fmt(totalIGST)}</td>
+                                        </tr>
+                                      </>
+                                    ) : showCGST || showSGST || (totalIGST === 0 && sameState) ? (
+                                      <>
+                                        <tr>
+                                          <td style={{ width: "50%" }}>CGST</td>
+                                          <td style={{ width: "50%" }}>{fmt(totalCGST)}</td>
+                                        </tr>
+                                        <tr>
+                                          <td style={{ width: "50%" }}>SGST</td>
+                                          <td style={{ width: "50%" }}>{fmt(totalSGST)}</td>
+                                        </tr>
+                                      </>
+                                    ) : showIGST || (totalCGST === 0 && totalSGST === 0 && !sameState) ? (
+                                      <tr>
+                                        <td style={{ width: "50%" }}>IGST</td>
+                                        <td style={{ width: "50%" }}>{fmt(totalIGST)}</td>
+                                      </tr>
+                                    ) : null}
+                                  </>
+                                )}
+                                {!hasGST && (
+                                  <tr>
+                                    <td style={{ color: "var(--muted)", fontSize: "10px", width: "50%" }}>Without GST</td>
+                                    <td style={{ width: "50%" }}></td>
+                                  </tr>
+                                )}
+                                {gstModeStr !== "Exempt" && totalTaxAmount > 0 && (
+                                  <tr>
+                                    <td style={{ width: "50%", color: "#166534", fontWeight: 600 }}>Total GST</td>
+                                    <td style={{ width: "50%", color: "#166534", fontWeight: 700 }}>{fmt(totalTaxAmount)}</td>
+                                  </tr>
+                                )}
+                                <tr className="ft-grand-total">
+                                  <td style={{ width: "50%" }}>GRAND TOTAL</td>
+                                  <td style={{ width: "50%" }}>{fmt(grandTotal)}</td>
+                                </tr>
+                                <tr>
+                                  <td colSpan="2" style={{ fontSize: "10px", color: "#475569", fontStyle: "italic", paddingTop: "6px", textAlign: "right" }}>
+                                    <strong>Amount in Words:</strong> {numberToWords(grandTotal)}
+                                  </td>
+                                </tr>
+                              </>);
+                            })()}
+                          </tbody>
                         </table>
                       </div>
 

@@ -10,8 +10,10 @@ const FollowupList = () => {
   const [followups, setFollowups] = useState([]);
 
   useEffect(() => {
+    const token = localStorage.getItem("token");
+    const config = { headers: { Authorization: `Bearer ${token}` } };
     axios
-      .get(`${API}/api/followups?type=${type}`)
+      .get(`${API}/api/followups?type=${type}`, config)
       .then(res => setFollowups(res.data))
       .catch(console.error);
   }, [type]);

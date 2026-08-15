@@ -219,9 +219,9 @@ const Dashboard = () => {
   const fieldToday = departmentCount(tfd, "field_outcome");
 
   const followupNotes = useMemo(() => ({
-    Todays: leads.filter(l => l.followup_required === "Yes" && normalizeDate(l.followup_date) === today && l.followup_notes),
-    Due: leads.filter(l => l.followup_required === "Yes" && normalizeDate(l.followup_date) > today && l.followup_notes),
-    Overdue: leads.filter(l => l.followup_required === "Yes" && normalizeDate(l.followup_date) < today && l.followup_notes),
+    Todays: leads.filter(l => l.followup_required === "Yes" && l.followup_date && normalizeDate(l.followup_date) === today),
+    Due: leads.filter(l => l.followup_required === "Yes" && l.followup_date && normalizeDate(l.followup_date) > today),
+    Overdue: leads.filter(l => l.followup_required === "Yes" && l.followup_date && normalizeDate(l.followup_date) < today),
   }), [leads, today]);
   const followupSummary = useMemo(() => ({ Todays: followupNotes.Todays.length, Due: followupNotes.Due.length, Overdue: followupNotes.Overdue.length }), [followupNotes]);
 

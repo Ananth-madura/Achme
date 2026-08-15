@@ -1329,3 +1329,323 @@
 2026-08-07T10:06:17: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-315bebde308sm2490963eec.20 - gsmtp
 2026-08-07T10:31:15: OTP email transporter verification failed: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
 2026-08-07T10:31:15: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-315beb883d9sm2712351eec.15 - gsmtp
+2026-08-10T16:43:22: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-10T16:43:22: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials a92af1059eb24-14101a60867sm34427249c88.9 - gsmtp
+2026-08-11T11:44:12: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-11T11:44:12: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31c61cd4a7esm1530103eec.10 - gsmtp
+2026-08-12T10:32:08: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T10:32:08: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf6d7a3c7sm8843084eec.29 - gsmtp
+2026-08-12T10:43:31: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T10:43:31:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T10:43:31:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T10:43:31: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T10:43:37: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T10:43:37:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T10:43:37:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T10:43:37: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T10:44:02: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T10:44:02:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T10:44:02:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T10:44:02: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T10:44:05: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T10:44:05:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T10:44:05:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T10:44:05: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T10:44:39: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T10:44:39:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T10:44:39:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T10:44:39: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T10:54:04: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T10:54:04:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T10:54:04:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T10:54:04: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T10:57:05: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T10:57:05:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T10:57:05:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T10:57:05: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T11:37:06: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T11:37:06: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf40f7151sm6598254eec.12 - gsmtp
+2026-08-12T13:05:37: ⚠️ MySQL connection attempt failed (ETIMEDOUT). Remaining attempts: 9
+2026-08-12T13:05:39: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:05:39: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf6d726f1sm12119370eec.26 - gsmtp
+2026-08-12T13:08:02: ReferenceError: newStatus is not defined
+2026-08-12T13:08:02:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:02:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:02:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:08:02: 🔥 Process Guard (uncaughtException): newStatus is not defined ReferenceError: newStatus is not defined
+2026-08-12T13:08:02:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:02:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:02:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:08:05: ReferenceError: newStatus is not defined
+2026-08-12T13:08:05:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:05:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:05:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:08:05: 🔥 Process Guard (uncaughtException): newStatus is not defined ReferenceError: newStatus is not defined
+2026-08-12T13:08:05:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:05:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:05:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:08:24: ReferenceError: newStatus is not defined
+2026-08-12T13:08:24:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:24:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:24:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:08:24: 🔥 Process Guard (uncaughtException): newStatus is not defined ReferenceError: newStatus is not defined
+2026-08-12T13:08:24:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:24:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:24:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:08:24: ReferenceError: newStatus is not defined
+2026-08-12T13:08:24:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:24:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:24:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:08:24: 🔥 Process Guard (uncaughtException): newStatus is not defined ReferenceError: newStatus is not defined
+2026-08-12T13:08:24:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:296:41)
+2026-08-12T13:08:24:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:08:24:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:09:02: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:09:05: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:09:24: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:09:24: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:14:07: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:14:07: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials a92af1059eb24-14124583ad0sm6768188c88.12 - gsmtp
+2026-08-12T13:15:46: Quotation INSERT error: Error: Lock wait timeout exceeded; try restarting transaction
+2026-08-12T13:15:46:     at Packet.asError (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packets\packet.js:833:17)
+2026-08-12T13:15:46:     at Query.execute (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\command.js:29:26)
+2026-08-12T13:15:46:     at PoolConnection.handlePacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:554:34)
+2026-08-12T13:15:46:     at PacketParser.onPacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:104:12)
+2026-08-12T13:15:46:     at PacketParser.executeStart (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+2026-08-12T13:15:46:     at Socket.<anonymous> (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:111:25)
+2026-08-12T13:15:46:     at Socket.emit (node:events:509:20)
+2026-08-12T13:15:46:     at addChunk (node:internal/streams/readable:568:12)
+2026-08-12T13:15:46:     at readableAddChunkPushByteMode (node:internal/streams/readable:519:3)
+2026-08-12T13:15:46:     at Readable.push (node:internal/streams/readable:399:5)
+2026-08-12T13:15:46:     at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+2026-08-12T13:15:46:   code: 'ER_LOCK_WAIT_TIMEOUT',
+2026-08-12T13:15:46:   errno: 1205,
+2026-08-12T13:15:46:   sqlState: 'HY000',
+2026-08-12T13:15:46:   sqlMessage: 'Lock wait timeout exceeded; try restarting transaction',
+2026-08-12T13:15:46:   sql: 'INSERT INTO quotations\n' +
+2026-08-12T13:15:46:     '           (customer_id, quotation_date, total_cgst, total_sgst, total_igst, subtotal, total_tax, total_discount, grand_total,\n' +
+2026-08-12T13:15:46:     '            reference_no, from_address_id, from_address_custom,\n' +
+2026-08-12T13:15:46:     '            client_company, client_address1, client_address2, client_city, client_state, client_pincode, client_country,\n' +
+2026-08-12T13:15:46:     '            tax_type, custom_tax, exec_name, exec_phone, exec_email,\n' +
+2026-08-12T13:15:46:     '            terms_general, terms_tax, terms_project_period, terms_validity, terms_separate_orders,\n' +
+2026-08-12T13:15:46:     '            terms_payment, terms_payment_custom, terms_warranty, hsn_sac_code, supplier_branch,\n' +
+2026-08-12T13:15:46:     '            bank_details_id, bank_company, bank_name, bank_account, bank_ifsc, bank_branch, custom_terms, gst_mode, status, created_by)\n' +
+2026-08-12T13:15:46:     "           VALUES (66,'2026-08-12',900,900,0,10000,1800,500,11300,'QT-20260812-5782',NULL,NULL,'Test Proposal Corp',NULL,NULL,'Coimbatore',NULL,NULL,'India','GST18',NULL,NULL,NULL,NULL,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'Exclusive','Pending',708)"
+2026-08-12T13:15:46: }
+2026-08-12T13:15:56: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:16:09: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:16:09: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials a92af1059eb24-14124454d3csm7488408c88.2 - gsmtp
+2026-08-12T13:17:26: Quotation INSERT error: Error: Lock wait timeout exceeded; try restarting transaction
+2026-08-12T13:17:26:     at Packet.asError (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packets\packet.js:833:17)
+2026-08-12T13:17:26:     at Query.execute (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\command.js:29:26)
+2026-08-12T13:17:26:     at PoolConnection.handlePacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:554:34)
+2026-08-12T13:17:26:     at PacketParser.onPacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:104:12)
+2026-08-12T13:17:26:     at PacketParser.executeStart (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+2026-08-12T13:17:26:     at Socket.<anonymous> (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:111:25)
+2026-08-12T13:17:26:     at Socket.emit (node:events:509:20)
+2026-08-12T13:17:26:     at addChunk (node:internal/streams/readable:568:12)
+2026-08-12T13:17:26:     at readableAddChunkPushByteMode (node:internal/streams/readable:519:3)
+2026-08-12T13:17:26:     at Readable.push (node:internal/streams/readable:399:5)
+2026-08-12T13:17:26:     at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+2026-08-12T13:17:26:   code: 'ER_LOCK_WAIT_TIMEOUT',
+2026-08-12T13:17:26:   errno: 1205,
+2026-08-12T13:17:26:   sqlState: 'HY000',
+2026-08-12T13:17:26:   sqlMessage: 'Lock wait timeout exceeded; try restarting transaction',
+2026-08-12T13:17:26:   sql: 'INSERT INTO quotations\n' +
+2026-08-12T13:17:26:     '           (customer_id, quotation_date, total_cgst, total_sgst, total_igst, subtotal, total_tax, total_discount, grand_total,\n' +
+2026-08-12T13:17:26:     '            reference_no, from_address_id, from_address_custom,\n' +
+2026-08-12T13:17:26:     '            client_company, client_address1, client_address2, client_city, client_state, client_pincode, client_country,\n' +
+2026-08-12T13:17:26:     '            tax_type, custom_tax, exec_name, exec_phone, exec_email,\n' +
+2026-08-12T13:17:26:     '            terms_general, terms_tax, terms_project_period, terms_validity, terms_separate_orders,\n' +
+2026-08-12T13:17:26:     '            terms_payment, terms_payment_custom, terms_warranty, hsn_sac_code, supplier_branch,\n' +
+2026-08-12T13:17:26:     '            bank_details_id, bank_company, bank_name, bank_account, bank_ifsc, bank_branch, custom_terms, gst_mode, status, created_by)\n' +
+2026-08-12T13:17:26:     "           VALUES (68,'2026-08-12',900,900,0,10000,1800,500,11300,'QT-20260812-5945',NULL,NULL,'Test Proposal Corp',NULL,NULL,'Coimbatore',NULL,NULL,'India','GST18',NULL,NULL,NULL,NULL,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'Exclusive','Pending',708)"
+2026-08-12T13:17:26: }
+2026-08-12T13:17:35: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:18:06: Quotation INSERT error: Error: Lock wait timeout exceeded; try restarting transaction
+2026-08-12T13:18:06:     at Packet.asError (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packets\packet.js:833:17)
+2026-08-12T13:18:06:     at Query.execute (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\command.js:29:26)
+2026-08-12T13:18:06:     at PoolConnection.handlePacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:554:34)
+2026-08-12T13:18:06:     at PacketParser.onPacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:104:12)
+2026-08-12T13:18:06:     at PacketParser.executeStart (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+2026-08-12T13:18:06:     at Socket.<anonymous> (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:111:25)
+2026-08-12T13:18:06:     at Socket.emit (node:events:509:20)
+2026-08-12T13:18:06:     at addChunk (node:internal/streams/readable:568:12)
+2026-08-12T13:18:06:     at readableAddChunkPushByteMode (node:internal/streams/readable:519:3)
+2026-08-12T13:18:06:     at Readable.push (node:internal/streams/readable:399:5)
+2026-08-12T13:18:06:     at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+2026-08-12T13:18:06:   code: 'ER_LOCK_WAIT_TIMEOUT',
+2026-08-12T13:18:06:   errno: 1205,
+2026-08-12T13:18:06:   sqlState: 'HY000',
+2026-08-12T13:18:06:   sqlMessage: 'Lock wait timeout exceeded; try restarting transaction',
+2026-08-12T13:18:06:   sql: 'INSERT INTO quotations\n' +
+2026-08-12T13:18:06:     '           (customer_id, quotation_date, total_cgst, total_sgst, total_igst, subtotal, total_tax, total_discount, grand_total,\n' +
+2026-08-12T13:18:06:     '            reference_no, from_address_id, from_address_custom,\n' +
+2026-08-12T13:18:06:     '            client_company, client_address1, client_address2, client_city, client_state, client_pincode, client_country,\n' +
+2026-08-12T13:18:06:     '            tax_type, custom_tax, exec_name, exec_phone, exec_email,\n' +
+2026-08-12T13:18:06:     '            terms_general, terms_tax, terms_project_period, terms_validity, terms_separate_orders,\n' +
+2026-08-12T13:18:06:     '            terms_payment, terms_payment_custom, terms_warranty, hsn_sac_code, supplier_branch,\n' +
+2026-08-12T13:18:06:     '            bank_details_id, bank_company, bank_name, bank_account, bank_ifsc, bank_branch, custom_terms, gst_mode, status, created_by)\n' +
+2026-08-12T13:18:06:     "           VALUES (69,'2026-08-12',900,900,0,10000,1800,500,11300,'QT-20260812-3297',NULL,NULL,'Test Proposal Corp',NULL,NULL,'Coimbatore',NULL,NULL,'India','GST18',NULL,NULL,NULL,NULL,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'Exclusive','Pending',708)"
+2026-08-12T13:18:06: }
+2026-08-12T13:18:22: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:18:22: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials a92af1059eb24-1412458a390sm7084203c88.14 - gsmtp
+2026-08-12T13:18:44: ❌ Port 5000 is already in use. Either stop the process currently listening on port 5000 or set a different PORT in backend/.env.
+2026-08-12T13:18:52: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:18:52: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf6d7b2a4sm7497733eec.30 - gsmtp
+2026-08-12T13:20:00: ❌ Port 5000 is already in use. Either stop the process currently listening on port 5000 or set a different PORT in backend/.env.
+2026-08-12T13:20:07: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:20:07: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials a92af1059eb24-1412458a390sm7103426c88.14 - gsmtp
+2026-08-12T13:21:26: ❌ quotations.terms_general type: Connection lost: The server closed the connection.
+2026-08-12T13:21:26: Error adding column quotations.terms_general: Connection lost: The server closed the connection.
+2026-08-12T13:21:26: ❌ Check column quotations.terms_tax: read ECONNRESET
+2026-08-12T13:21:26: Error adding column quotations.terms_tax: read ECONNRESET
+2026-08-12T13:21:32: ❌ Port 5000 is already in use. Either stop the process currently listening on port 5000 or set a different PORT in backend/.env.
+2026-08-12T13:21:40: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:21:40: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf67912d0sm12371232eec.24 - gsmtp
+2026-08-12T13:21:56: ❌ Port 5000 is already in use. Either stop the process currently listening on port 5000 or set a different PORT in backend/.env.
+2026-08-12T13:22:04: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:22:04: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf6d726f1sm12417585eec.26 - gsmtp
+2026-08-12T13:22:06: ❌ Port 5000 is already in use. Either stop the process currently listening on port 5000 or set a different PORT in backend/.env.
+2026-08-12T13:22:14: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:22:14: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf40f9cfbsm7329926eec.13 - gsmtp
+2026-08-12T13:22:15: ❌ Port 5000 is already in use. Either stop the process currently listening on port 5000 or set a different PORT in backend/.env.
+2026-08-12T13:22:24: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:22:24: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf6d726f1sm12422768eec.26 - gsmtp
+2026-08-12T13:22:49: Quotation INSERT error: Error: Connection lost: The server closed the connection.
+2026-08-12T13:22:49:     at Socket.<anonymous> (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:124:31)
+2026-08-12T13:22:49:     at Socket.emit (node:events:509:20)
+2026-08-12T13:22:49:     at TCP.<anonymous> (node:net:350:12) {
+2026-08-12T13:22:49:   fatal: true,
+2026-08-12T13:22:49:   code: 'PROTOCOL_CONNECTION_LOST'
+2026-08-12T13:22:49: }
+2026-08-12T13:23:32: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:23:35: Quotation INSERT error: Error: Connection lost: The server closed the connection.
+2026-08-12T13:23:35:     at Socket.<anonymous> (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:124:31)
+2026-08-12T13:23:35:     at Socket.emit (node:events:509:20)
+2026-08-12T13:23:35:     at TCP.<anonymous> (node:net:350:12) {
+2026-08-12T13:23:35:   fatal: true,
+2026-08-12T13:23:35:   code: 'PROTOCOL_CONNECTION_LOST'
+2026-08-12T13:23:35: }
+2026-08-12T13:24:10: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:24:39: Quotation INSERT error: Error: Lock wait timeout exceeded; try restarting transaction
+2026-08-12T13:24:39:     at Packet.asError (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packets\packet.js:833:17)
+2026-08-12T13:24:39:     at Query.execute (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\command.js:29:26)
+2026-08-12T13:24:39:     at PoolConnection.handlePacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:554:34)
+2026-08-12T13:24:39:     at PacketParser.onPacket (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:104:12)
+2026-08-12T13:24:39:     at PacketParser.executeStart (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\packet_parser.js:75:16)
+2026-08-12T13:24:39:     at Socket.<anonymous> (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:111:25)
+2026-08-12T13:24:39:     at Socket.emit (node:events:509:20)
+2026-08-12T13:24:39:     at addChunk (node:internal/streams/readable:568:12)
+2026-08-12T13:24:39:     at readableAddChunkPushByteMode (node:internal/streams/readable:519:3)
+2026-08-12T13:24:39:     at Readable.push (node:internal/streams/readable:399:5)
+2026-08-12T13:24:39:     at TCP.onStreamRead (node:internal/stream_base_commons:189:23) {
+2026-08-12T13:24:39:   code: 'ER_LOCK_WAIT_TIMEOUT',
+2026-08-12T13:24:39:   errno: 1205,
+2026-08-12T13:24:39:   sqlState: 'HY000',
+2026-08-12T13:24:39:   sqlMessage: 'Lock wait timeout exceeded; try restarting transaction',
+2026-08-12T13:24:39:   sql: 'INSERT INTO quotations\n' +
+2026-08-12T13:24:39:     '           (customer_id, quotation_date, total_cgst, total_sgst, total_igst, subtotal, total_tax, total_discount, grand_total,\n' +
+2026-08-12T13:24:39:     '            reference_no, from_address_id, from_address_custom,\n' +
+2026-08-12T13:24:39:     '            client_company, client_address1, client_address2, client_city, client_state, client_pincode, client_country,\n' +
+2026-08-12T13:24:39:     '            tax_type, custom_tax, exec_name, exec_phone, exec_email,\n' +
+2026-08-12T13:24:39:     '            terms_general, terms_tax, terms_project_period, terms_validity, terms_separate_orders,\n' +
+2026-08-12T13:24:39:     '            terms_payment, terms_payment_custom, terms_warranty, hsn_sac_code, supplier_branch,\n' +
+2026-08-12T13:24:39:     '            bank_details_id, bank_company, bank_name, bank_account, bank_ifsc, bank_branch, custom_terms, gst_mode, status, created_by)\n' +
+2026-08-12T13:24:39:     "           VALUES (77,'2026-08-12',450,450,0,5000,900,0,5900,'QT-20260812-9803',NULL,NULL,'Single Test Corp',NULL,NULL,NULL,NULL,NULL,'India','GST18',NULL,NULL,NULL,NULL,0,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,'Exclusive','Pending',708)"
+2026-08-12T13:24:39: }
+2026-08-12T13:24:48: ⚠️ Transaction abandoned — rolling back to free the connection.
+2026-08-12T13:24:49: Quotation INSERT error: Error: Connection lost: The server closed the connection.
+2026-08-12T13:24:49:     at Socket.<anonymous> (D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\base\connection.js:124:31)
+2026-08-12T13:24:49:     at Socket.emit (node:events:509:20)
+2026-08-12T13:24:49:     at TCP.<anonymous> (node:net:350:12) {
+2026-08-12T13:24:49:   fatal: true,
+2026-08-12T13:24:49:   code: 'PROTOCOL_CONNECTION_LOST'
+2026-08-12T13:24:49: }
+2026-08-12T13:25:21: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:25:21: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf628e42asm9736560eec.15 - gsmtp
+2026-08-12T13:25:25: TypeError: storage.bind is not a function
+2026-08-12T13:25:25:     at pool.query (D:\ACHME_COMUNICATION-main\backend\config\txnShim.js:50:33)
+2026-08-12T13:25:25:     at D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:232:8
+2026-08-12T13:25:25:     at D:\ACHME_COMUNICATION-main\backend\config\txnShim.js:93:32
+2026-08-12T13:25:25:     at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:65:14)
+2026-08-12T13:25:25:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\config\txnShim.js:93:17)
+2026-08-12T13:25:25:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:25:25:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:25:25: 🔥 Process Guard (uncaughtException): storage.bind is not a function TypeError: storage.bind is not a function
+2026-08-12T13:25:25:     at pool.query (D:\ACHME_COMUNICATION-main\backend\config\txnShim.js:50:33)
+2026-08-12T13:25:25:     at D:\ACHME_COMUNICATION-main\backend\routes\quotationRoutes.js:232:8
+2026-08-12T13:25:25:     at D:\ACHME_COMUNICATION-main\backend\config\txnShim.js:93:32
+2026-08-12T13:25:25:     at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:65:14)
+2026-08-12T13:25:25:     at Query.onResult (D:\ACHME_COMUNICATION-main\backend\config\txnShim.js:93:17)
+2026-08-12T13:25:25:     at D:\ACHME_COMUNICATION-main\backend\node_modules\mysql2\lib\commands\query.js:94:16
+2026-08-12T13:25:25:     at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+2026-08-12T13:26:21: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:26:21: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf3d0517csm8202500eec.9 - gsmtp
+2026-08-12T13:26:30: [TargetSync] No target found for user_id=708 name="Admin" exec="" — skipping sync
+2026-08-12T13:26:31: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T13:26:31:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T13:26:31:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T13:26:31: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T13:26:47: [TargetSync] No target found for user_id=708 name="Admin" exec="" — skipping sync
+2026-08-12T13:27:11: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:27:11: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31cf3624c08sm8301532eec.5 - gsmtp
+2026-08-12T13:27:17: [TargetSync] No target found for user_id=708 name="Admin" exec="" — skipping sync
+2026-08-12T13:27:17: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T13:27:17:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T13:27:17:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T13:27:17: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T13:57:30: ⚠️ OTP email transporter verification failed. Please verify EMAIL_USER and EMAIL_PASS (App Password) in backend/.env. Details: Invalid login: 535-5.7.8 Username and Password not accepted. For more information, go to
+2026-08-12T13:57:30: 535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-31d39e5ebe8sm7807074eec.21 - gsmtp
+2026-08-12T13:59:51: ⚠️ Standard Puppeteer launch failed. Attempting system browser fallback... Could not find Chrome (ver. 146.0.7680.153). This can occur if either
+2026-08-12T13:59:51:  1. you did not perform an installation before running the script (e.g. `npx puppeteer browsers install chrome`) or
+2026-08-12T13:59:51:  2. your cache path is incorrectly configured (which is: C:\Users\thana\.cache\puppeteer).
+2026-08-12T13:59:51: For (2), check out our guide on configuring puppeteer at https://pptr.dev/guides/configuration.
+2026-08-12T14:18:55: Error: Cannot find module 'dotenv'
+2026-08-12T14:18:55: Require stack:
+2026-08-12T14:18:55: - d:\ACHME_COMUNICATION-main\backend\server.js
+2026-08-12T14:18:55:     at Module._resolveFilename (node:internal/modules/cjs/loader:1502:15)
+2026-08-12T14:18:55:     at wrapResolveFilename (node:internal/modules/cjs/loader:1073:27)
+2026-08-12T14:18:55:     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1097:10)
+2026-08-12T14:18:55:     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1118:12)
+2026-08-12T14:18:55:     at Module._load (node:internal/modules/cjs/loader:1287:25)
+2026-08-12T14:18:55:     at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+2026-08-12T14:18:55:     at Module.require (node:internal/modules/cjs/loader:1602:12)
+2026-08-12T14:18:55:     at require (node:internal/modules/helpers:191:16)
+2026-08-12T14:18:55:     at Object.<anonymous> (d:\ACHME_COMUNICATION-main\backend\server.js:3:1)
+2026-08-12T14:18:55:     at Module._compile (node:internal/modules/cjs/loader:1856:14) {
+2026-08-12T14:18:55:   code: 'MODULE_NOT_FOUND',
+2026-08-12T14:18:55:   requireStack: [ 'd:\\ACHME_COMUNICATION-main\\backend\\server.js' ]
+2026-08-12T14:18:55: }
+2026-08-12T14:18:59: Error: Cannot find module 'dotenv'
+2026-08-12T14:18:59: Require stack:
+2026-08-12T14:18:59: - d:\ACHME_COMUNICATION-main\backend\server.js
+2026-08-12T14:18:59:     at Module._resolveFilename (node:internal/modules/cjs/loader:1502:15)
+2026-08-12T14:18:59:     at wrapResolveFilename (node:internal/modules/cjs/loader:1073:27)
+2026-08-12T14:18:59:     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1097:10)
+2026-08-12T14:18:59:     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1118:12)
+2026-08-12T14:18:59:     at Module._load (node:internal/modules/cjs/loader:1287:25)
+2026-08-12T14:18:59:     at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+2026-08-12T14:18:59:     at Module.require (node:internal/modules/cjs/loader:1602:12)
+2026-08-12T14:18:59:     at require (node:internal/modules/helpers:191:16)
+2026-08-12T14:18:59:     at Object.<anonymous> (d:\ACHME_COMUNICATION-main\backend\server.js:3:1)
+2026-08-12T14:18:59:     at Module._compile (node:internal/modules/cjs/loader:1856:14) {
+2026-08-12T14:18:59:   code: 'MODULE_NOT_FOUND',
+2026-08-12T14:18:59:   requireStack: [ 'd:\\ACHME_COMUNICATION-main\\backend\\server.js' ]
+2026-08-12T14:18:59: }
+2026-08-12T14:19:02: Error: Cannot find module 'dotenv'
+2026-08-12T14:19:02: Require stack:
+2026-08-12T14:19:02: - d:\ACHME_COMUNICATION-main\backend\server.js
+2026-08-12T14:19:02:     at Module._resolveFilename (node:internal/modules/cjs/loader:1502:15)
+2026-08-12T14:19:02:     at wrapResolveFilename (node:internal/modules/cjs/loader:1073:27)
+2026-08-12T14:19:02:     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1097:10)
+2026-08-12T14:19:02:     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1118:12)
+2026-08-12T14:19:02:     at Module._load (node:internal/modules/cjs/loader:1287:25)
+2026-08-12T14:19:02:     at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+2026-08-12T14:19:02:     at Module.require (node:internal/modules/cjs/loader:1602:12)
+2026-08-12T14:19:02:     at require (node:internal/modules/helpers:191:16)
+2026-08-12T14:19:02:     at Object.<anonymous> (d:\ACHME_COMUNICATION-main\backend\server.js:3:1)
+2026-08-12T14:19:02:     at Module._compile (node:internal/modules/cjs/loader:1856:14) {
+2026-08-12T14:19:02:   code: 'MODULE_NOT_FOUND',
+2026-08-12T14:19:02:   requireStack: [ 'd:\\ACHME_COMUNICATION-main\\backend\\server.js' ]
+2026-08-12T14:19:02: }

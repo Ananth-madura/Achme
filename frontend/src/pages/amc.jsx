@@ -89,6 +89,21 @@ const fetchContracts = useCallback(async () => {
     useEffect(() => {
       fetchServices();
       fetchContracts();
+
+      const handleRefresh = () => {
+        fetchServices();
+        fetchContracts();
+      };
+
+      socket.on("data_changed", handleRefresh);
+      window.addEventListener("refresh-dashboard", handleRefresh);
+      window.addEventListener("refresh-amc", handleRefresh);
+
+      return () => {
+        socket.off("data_changed", handleRefresh);
+        window.removeEventListener("refresh-dashboard", handleRefresh);
+        window.removeEventListener("refresh-amc", handleRefresh);
+      };
     }, [fetchServices, fetchContracts]);
 
     // Contract search and dropdown state

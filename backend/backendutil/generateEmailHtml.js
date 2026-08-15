@@ -1,5 +1,7 @@
 "use strict";
 
+const { gstSummary } = require("./gstSummary");
+
 function esc(v) {
   if (v == null) return "";
   return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -27,12 +29,12 @@ function generateEmailHtml({ invoice, items, type, docNumber, docLabel, companyN
   const hasGST = taxRate > 0;
   const hasHSN = (items || []).some((i) => i.hsn_sac);
 
-  const subtotal = Number(h.subtotal || 0);
-  const totalDiscount = Number(h.total_discount || 0);
+  const summary = gstSummary(h, items || []);
+  const totalDiscount = summary.discount;
   const totalCGST = Number(h.total_cgst || 0);
   const totalSGST = Number(h.total_sgst || 0);
   const totalIGST = Number(h.total_igst || 0);
-  const grandTotal = Number(h.grand_total || 0) || (subtotal - totalDiscount + totalCGST + totalSGST + totalIGST);
+  const grandTotal = summary.grandTotal;
 
   const clientAddr = [h.client_address1, h.client_address2, [h.client_city, h.client_state].filter(Boolean).join(", ")]
     .filter(Boolean)
@@ -64,21 +66,22 @@ function generateEmailHtml({ invoice, items, type, docNumber, docLabel, companyN
     </tr>`;
   }).join("");
 
-  const emailGstMode = h.gst_mode || "Exclusive";
-  const emailGrossBase = subtotal - totalDiscount;
-  const emailTaxBase = emailGstMode === "Inclusive"
-    ? Math.max(emailGrossBase - totalCGST - totalSGST - totalIGST, 0)
-    : emailGrossBase;
+  const emailGstMode = summary.mode;
+  const emailTaxBase = summary.subtotal;
   const emailCgstPct = emailTaxBase > 0 && totalCGST > 0 ? +((totalCGST / emailTaxBase) * 100).toFixed(2).replace(/\.?0+$/, '') : 0;
   const emailSgstPct = emailTaxBase > 0 && totalSGST > 0 ? +((totalSGST / emailTaxBase) * 100).toFixed(2).replace(/\.?0+$/, '') : 0;
   const emailIgstPct = emailTaxBase > 0 && totalIGST > 0 ? +((totalIGST / emailTaxBase) * 100).toFixed(2).replace(/\.?0+$/, '') : 0;
 
+  const emailSubtotal = summary.subtotal;
+  const emailTotalTax = summary.gstAmount;
+
   const summaryRows = `
-    <tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;font-family:Arial,sans-serif;">Subtotal</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;font-family:Arial,sans-serif;">${fmtNum(subtotal)}</td></tr>
+    <tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;font-family:Arial,sans-serif;">Subtotal</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;font-family:Arial,sans-serif;">${fmtNum(emailSubtotal)}</td></tr>
     ${totalDiscount > 0 ? `<tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;font-family:Arial,sans-serif;">Discount</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;font-family:Arial,sans-serif;">${fmtNum(totalDiscount)}</td></tr>` : ""}
     ${totalCGST > 0 ? `<tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;font-family:Arial,sans-serif;">CGST${emailCgstPct > 0 ? ` (${emailCgstPct}%)` : ""}</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;font-family:Arial,sans-serif;">${fmtNum(totalCGST)}</td></tr>` : ""}
     ${totalSGST > 0 ? `<tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;font-family:Arial,sans-serif;">SGST${emailSgstPct > 0 ? ` (${emailSgstPct}%)` : ""}</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;font-family:Arial,sans-serif;">${fmtNum(totalSGST)}</td></tr>` : ""}
     ${totalIGST > 0 ? `<tr><td style="padding:10px 8px;font-size:12px;color:#64748b;width:50%;font-family:Arial,sans-serif;">IGST${emailIgstPct > 0 ? ` (${emailIgstPct}%)` : ""}</td><td style="padding:10px 8px;font-size:12px;color:#1a1f2e;text-align:right;font-weight:700;width:50%;font-family:Arial,sans-serif;">${fmtNum(totalIGST)}</td></tr>` : ""}
+    ${emailGstMode !== "Exempt" && emailTotalTax > 0 ? `<tr><td style="padding:10px 8px;font-size:12px;color:#166534;font-weight:600;width:50%;font-family:Arial,sans-serif;">Total GST</td><td style="padding:10px 8px;font-size:12px;color:#166534;text-align:right;font-weight:700;width:50%;font-family:Arial,sans-serif;">${fmtNum(emailTotalTax)}</td></tr>` : ""}
     <tr><td style="padding:10px 8px;font-size:14px;color:#1e3a8a;font-weight:700;background:#f0f4ff;width:50%;font-family:Arial,sans-serif;">GRAND TOTAL</td><td style="padding:10px 8px;font-size:14px;color:#1e3a8a;text-align:right;font-weight:700;background:#f0f4ff;width:50%;font-family:Arial,sans-serif;">${fmtNum(grandTotal)}</td></tr>`;
 
   const bank = {
@@ -91,7 +94,16 @@ function generateEmailHtml({ invoice, items, type, docNumber, docLabel, companyN
 
   const terms = [];
   if (h.terms_general) terms.push("General Terms & Conditions apply.");
-  if (h.terms_tax) terms.push("Prices quoted are exclusive of Sales and Service Tax.");
+  const mode = h.gst_mode || (h.terms_tax === 1 || h.terms_tax === true || h.terms_tax === "1" || h.terms_tax === "true" ? "Exempt" : "Exclusive");
+  if (mode === "Inclusive") {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  } else if (mode === "Exempt") {
+    terms.push("Prices quoted are exempt of Sales and Service Tax.");
+  } else if (mode === "Tax Extra") {
+    terms.push("TAX EXTRA - Prices quoted are exclusive of Sales and Service Tax.");
+  } else {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  }
   if (h.terms_project_period) terms.push(`Project Period: ${esc(h.terms_project_period)}`);
   if (h.terms_validity) terms.push(`Quote valid for ${esc(h.terms_validity)} from quotation date.`);
   try {

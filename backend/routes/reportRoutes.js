@@ -140,7 +140,7 @@ router.get("/employee-comparison", verifyToken, async (req, res) => {
 
       const [sales] = await db.promise().query(`SELECT COALESCE(SUM(grand_total), 0) as sales_rev FROM performainvoices WHERE (created_by = ? OR created_by = ? OR exec_name LIKE ?) AND (DATE(invoice_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, namePattern, startDate, endDate, startDate, endDate]);
 
-      const [callReports] = await db.promise().query(`SELECT COUNT(*) as total, SUM(CASE WHEN LOWER(status) IN ('completed','closed','done') THEN 1 ELSE 0 END) as completed FROM call_reports WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR executive_name LIKE ? OR service_person LIKE ? OR technician LIKE ?) AND (DATE(report_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, namePattern, namePattern, namePattern, namePattern, startDate, endDate, startDate, endDate]);
+      const [callReports] = await db.promise().query(`SELECT COUNT(*) as total, SUM(CASE WHEN LOWER(status) IN ('completed','closed','done') THEN 1 ELSE 0 END) as completed, COALESCE(SUM(COALESCE(km, 0)), 0) as total_km FROM call_reports WHERE (created_by = ? OR created_by = ? OR staff_name LIKE ? OR executive_name LIKE ? OR service_person LIKE ? OR technician LIKE ?) AND (DATE(report_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, namePattern, namePattern, namePattern, namePattern, startDate, endDate, startDate, endDate]);
 
       const [tasks] = await db.promise().query(`SELECT COUNT(*) as total, SUM(CASE WHEN project_status = 'Completed' THEN 1 ELSE 0 END) as completed FROM tasks WHERE (assigned_to = ? OR assigned_to = ? OR created_by = ? OR created_by = ? OR staff_name LIKE ?) AND (DATE(created_date) BETWEEN ? AND ? OR DATE(created_at) BETWEEN ? AND ?)`, [empId, empUserId, empId, empUserId, namePattern, startDate, endDate, startDate, endDate]);
 
@@ -150,6 +150,7 @@ router.get("/employee-comparison", verifyToken, async (req, res) => {
       const totalRevenue = (Number(sales[0].sales_rev) || 0) + (Number(services[0].revenue) || 0);
       const crTotal = callReports[0]?.total || 0;
       const crCompleted = callReports[0]?.completed || 0;
+      const totalKm = parseFloat(callReports[0]?.total_km || 0);
 
       return {
         id: empId,
@@ -166,6 +167,7 @@ router.get("/employee-comparison", verifyToken, async (req, res) => {
         serviceRevenue: totalRevenue,
         callReportsTotal: crTotal,
         callReportsCompleted: crCompleted,
+        totalKm,
         tasksAssigned: tasks[0].total || 0,
         tasksCompleted: tasks[0].completed || 0
       };

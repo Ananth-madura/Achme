@@ -142,7 +142,7 @@ const Dashboard = () => {
     fetching.current = true;
     setLoading(true);
     const urls = [`${API_BACKEND}/api/Telecalls`, `${API_BACKEND}/api/Walkins`, `${API_BACKEND}/api/Fields`,
-    `${API_BACKEND}/api/teammember`, `${API_BACKEND}/api/performainvoice`,
+    `${API_BACKEND}/api/teammember?excludeEngineers=true`, `${API_BACKEND}/api/performainvoice`,
     `${API_BACKEND}/api/auth/pending-users`, `${API_BACKEND}/api/leads/escalations`,
     `${API_BACKEND}/api/quotations`, `${API_BACKEND}/api/invoice`, `${API_BACKEND}/api/payments`,
     `${API_BACKEND}/api/client`, `${API_BACKEND}/api/task`, `${API_BACKEND}/api/targets`,
@@ -227,12 +227,51 @@ const Dashboard = () => {
     return () => clearInterval(id);
   }, [fetchAll]);
 
-  const uniqueStaff = useMemo(() => [...new Set([
-    ...leads.map(l => l.staff_name).filter(Boolean),
-    ...walkins.map(w => w.staff_name).filter(Boolean),
-    ...fields.map(f => f.staff_name).filter(Boolean),
-    ...team.map(t => t.emp_name || t.first_name).filter(Boolean)
-  ])], [leads, walkins, fields, team]);
+  const filteredTeam = useMemo(() => {
+    return (team || []).filter(t => {
+      const role = String(t.emp_role || t.role || "").toLowerCase();
+      const title = String(t.job_title || "").toLowerCase();
+      return role !== "engineer" && role !== "eng" && role !== "service engineer" && !title.includes("engineer");
+    });
+  }, [team]);
+
+  const engineerNames = useMemo(() => {
+    const set = new Set();
+    (team || []).forEach(t => {
+      const role = String(t.emp_role || t.role || "").toLowerCase();
+      const title = String(t.job_title || "").toLowerCase();
+      if (role === "engineer" || role === "eng" || role === "service engineer" || title.includes("engineer")) {
+        const full = (t.emp_name || `${t.first_name || ""} ${t.last_name || ""}`).trim();
+        if (full) set.add(full.toLowerCase());
+        if (t.first_name) set.add(t.first_name.trim().toLowerCase());
+      }
+    });
+    return set;
+  }, [team]);
+
+  const uniqueStaff = useMemo(() => {
+    const rawList = [
+      ...leads.map(l => l.staff_name || l.user_name || l.created_by_name),
+      ...walkins.map(w => w.staff_name || w.user_name || w.created_by_name),
+      ...fields.map(f => f.staff_name || f.user_name || f.created_by_name),
+      ...filteredTeam.map(t => (t.emp_name || `${t.first_name || ""} ${t.last_name || ""}`).trim()),
+      ...quotations.map(q => q.staff_name || q.created_by_name || q.prepared_by || q.user_name),
+      ...invoices.map(i => i.staff_name || i.created_by_name || i.prepared_by || i.user_name),
+      ...performaInvoices.map(p => p.staff_name || p.created_by_name || p.prepared_by || p.user_name),
+      ...payments.map(p => p.staff_name || p.created_by_name || p.user_name),
+      ...clients.map(c => c.staff_name || c.created_by_name || c.user_name),
+      ...tasks.map(t => t.assigned_to_name || t.staff_name || t.created_by_name || t.user_name),
+      ...targets.map(t => t.user_name || t.staff_name || t.emp_name),
+      ...amcContracts.map(a => a.staff_name || a.created_by_name || a.user_name),
+      ...callReports.map(c => c.staff_name || c.technician || c.engineer || c.user_name),
+      ...estimates.map(e => e.staff_name || e.created_by_name || e.user_name)
+    ]
+      .filter(Boolean)
+      .map(s => String(s).trim())
+      .filter(s => s.length > 0);
+
+    return [...new Set(rawList)].filter(name => !engineerNames.has(name.toLowerCase()));
+  }, [leads, walkins, fields, filteredTeam, quotations, invoices, performaInvoices, payments, clients, tasks, targets, amcContracts, callReports, estimates, engineerNames]);
 
   const userMatch = useCallback((item, query) => {
     if (!query || query === "all") return true;
@@ -242,15 +281,23 @@ const Dashboard = () => {
       item.emp_name,
       item.first_name,
       item.last_name,
+      item.user_name,
+      item.employee_name,
+      item.name,
       item.created_by_name,
+      item.created_by,
+      item.creator_name,
+      item.assigned_to_name,
+      item.assigned_to,
+      item.assigned_user,
+      item.assigned_staff,
       item.technician,
       item.engineer,
-      item.user_name,
-      item.assigned_to_name,
-      item.creator_name,
-      item.created_by,
-      item.assigned_to,
-      item.employee_name
+      item.service_engineer,
+      item.sales_person,
+      item.prepared_by,
+      (item.first_name && item.last_name) ? `${item.first_name} ${item.last_name}` : null,
+      (item.emp_name && item.last_name) ? `${item.emp_name} ${item.last_name}` : null
     ];
     return fieldsToMatch.some(f => f && String(f).toLowerCase().includes(q));
   }, []);
@@ -268,6 +315,7 @@ const Dashboard = () => {
   const ufamc = useMemo(() => selectedUser === "all" ? amcContracts : amcContracts.filter(a => userMatch(a, selectedUser)), [amcContracts, selectedUser, userMatch]);
   const ufcr = useMemo(() => selectedUser === "all" ? callReports : callReports.filter(c => userMatch(c, selectedUser)), [callReports, selectedUser, userMatch]);
   const ufest = useMemo(() => selectedUser === "all" ? estimates : estimates.filter(e => userMatch(e, selectedUser)), [estimates, selectedUser, userMatch]);
+  const ufesc = useMemo(() => selectedUser === "all" ? escalations : escalations.filter(e => userMatch(e, selectedUser)), [escalations, selectedUser, userMatch]);
 
   const ttd = useMemo(() => ufl.filter(l => normalizeDate(l.call_date) === today), [ufl, today]);
   const twd = useMemo(() => ufw.filter(w => normalizeDate(w.walkin_date) === today), [ufw, today]);
@@ -288,9 +336,9 @@ const Dashboard = () => {
   }), [telecallMonth, walkinMonth, fieldMonth]);
 
   const followupNotes = useMemo(() => ({
-    Todays: ufl.filter(l => l.followup_required === "Yes" && normalizeDate(l.followup_date) === today && l.followup_notes),
-    Due: ufl.filter(l => l.followup_required === "Yes" && normalizeDate(l.followup_date) > today && l.followup_notes),
-    Overdue: ufl.filter(l => l.followup_required === "Yes" && normalizeDate(l.followup_date) < today && l.followup_notes),
+    Todays: ufl.filter(l => l.followup_required === "Yes" && l.followup_date && normalizeDate(l.followup_date) === today),
+    Due: ufl.filter(l => l.followup_required === "Yes" && l.followup_date && normalizeDate(l.followup_date) > today),
+    Overdue: ufl.filter(l => l.followup_required === "Yes" && l.followup_date && normalizeDate(l.followup_date) < today),
   }), [ufl, today]);
   const followupSummary = useMemo(() => ({ Todays: followupNotes.Todays.length, Due: followupNotes.Due.length, Overdue: followupNotes.Overdue.length }), [followupNotes]);
 
@@ -480,10 +528,29 @@ const Dashboard = () => {
         {/* Staff Filter */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-3 md:p-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2 md:gap-3">
-              <Users className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold text-ink">Filter Dashboard by Person:</span>
-              <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 flex-1">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Users className="w-4 h-4 text-primary" />
+                <span className="text-xs font-bold text-ink">Filter Dashboard by Staff:</span>
+              </div>
+              
+              {/* Dropdown Select for Instant Staff Selection */}
+              <div className="relative shrink-0 min-w-[180px]">
+                <select
+                  value={selectedUser}
+                  onChange={(e) => setSelectedUser(e.target.value)}
+                  className="w-full pl-3 pr-8 py-1.5 text-xs font-semibold rounded-xl bg-surface border border-hairline hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all cursor-pointer text-ink appearance-none"
+                >
+                  <option value="all">All Staff Members ({uniqueStaff.length})</option>
+                  {uniqueStaff.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <ChevronRight className="w-3.5 h-3.5 text-muted absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+              </div>
+
+              {/* Quick Pill Buttons */}
+              <div className="flex flex-wrap gap-1.5 items-center">
                 <button
                   onClick={() => setSelectedUser("all")}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
@@ -493,7 +560,7 @@ const Dashboard = () => {
                   }`}
                 >
                   <Users className="w-3 h-3" />
-                  All Staff ({uniqueStaff.length})
+                  All ({uniqueStaff.length})
                 </button>
                 {uniqueStaff.slice(0, 8).map(name => {
                   const isActive = selectedUser === name;
@@ -551,7 +618,7 @@ const Dashboard = () => {
             {selectedUser !== "all" && (
               <button
                 onClick={() => setSelectedUser("all")}
-                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg transition-all shrink-0 self-start md:self-auto flex items-center gap-1"
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-xl transition-all shrink-0 self-start md:self-auto flex items-center gap-1 border border-rose-200"
               >
                 Clear Filter &times;
               </button>
@@ -647,13 +714,13 @@ const Dashboard = () => {
         )}
 
         {/* Escalation Alerts */}
-        {escalations.length > 0 && (
+        {ufesc.length > 0 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card p-4 md:p-5 border-l-4 border-l-rose-500 bg-rose-50/30">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm md:text-base font-bold text-rose-700 flex items-center gap-2">
                 <AlertTriangle className="w-4.5 h-4.5 text-rose-600" />
-                Escalation Alerts &mdash; Attention Required
-                <span className="bg-rose-600 text-white text-xs px-2 py-0.5 rounded-full">{escalations.length}</span>
+                Escalation Alerts &mdash; Attention Required {selectedUser !== "all" && <span className="text-xs text-rose-600 font-semibold">({selectedUser})</span>}
+                <span className="bg-rose-600 text-white text-xs px-2 py-0.5 rounded-full">{ufesc.length}</span>
               </h2>
               <button onClick={() => setShowEscalations(p => !p)} className="text-xs font-bold text-rose-600 hover:underline">
                 {showEscalations ? "Hide" : "Show Details"}
@@ -672,7 +739,7 @@ const Dashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {escalations.map(esc => (
+                    {ufesc.map(esc => (
                       <tr key={esc.id} className="border-b border-rose-100 hover:bg-rose-100/40">
                         <td className="px-2 py-2.5 font-semibold text-ink text-sm">{esc.customer_name}</td>
                         <td className="px-2 py-2.5 text-center text-muted text-xs">{esc.mobile_number}</td>
@@ -836,7 +903,7 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="h-[200px] md:h-[220px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <AreaChart data={revenueByMonth}>
                       <defs>
                         <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
@@ -874,7 +941,7 @@ const Dashboard = () => {
             </div>
 
             <div className="relative h-[160px] w-full flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <PieChart>
                   <Pie
                     data={leadSourceData}
@@ -954,9 +1021,9 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {team.length === 0 ? (
+                  {filteredTeam.length === 0 ? (
                     <tr><td colSpan="6" className="py-10 text-center text-muted italic">No team members registered yet</td></tr>
-                  ) : team.map((t, idx) => {
+                  ) : filteredTeam.map((t, idx) => {
                     const empName = t.emp_name || t.first_name || "Staff";
                     const isCurrentFiltered = selectedUser === empName;
                     

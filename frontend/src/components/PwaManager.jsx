@@ -77,13 +77,20 @@ export default function PwaManager() {
           return;
         }
 
-        // 3. Subscribe to Push Manager
+        // 3. Subscribe to Push Manager cleanly
         const subscribeOptions = {
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(keyRes.publicKey)
         };
 
-        const subscription = await registration.pushManager.subscribe(subscribeOptions);
+        let subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          try {
+            await subscription.unsubscribe();
+          } catch (_) {}
+        }
+
+        subscription = await registration.pushManager.subscribe(subscribeOptions);
         console.log("Browser successfully subscribed to Web Push:", subscription);
 
         // 4. Send subscription payload to SQL backend
@@ -98,7 +105,7 @@ export default function PwaManager() {
         
         console.log("Push subscription saved to server successfully.");
       } catch (err) {
-        console.error("Failed to subscribe user to push notifications:", err);
+        console.warn("Push notification subscription notice:", err.message || err);
       }
     };
 

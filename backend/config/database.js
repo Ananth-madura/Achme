@@ -5,20 +5,28 @@ require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
 const mysql = require("mysql2");
 const bcrypt = require("bcryptjs");
+const { attachTxnShim } = require("./txnShim");
 
 const dbPort = Number(process.env.DB_PORT) || 3306;
 const dbName = process.env.DB_NAME;
 const escapedDbName = dbName.replace(/`/g, "``");
 
-const db = mysql.createConnection({
+// A single connection serialises EVERY query from EVERY user onto one socket, so one
+// slow report stalls every login and every save. A pool runs them in parallel and
+// also survives a dropped connection instead of bricking the server until restart.
+const db = attachTxnShim(mysql.createPool({
   host: process.env.DB_HOST,
   port: dbPort,
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
   database: dbName,
   charset: "utf8mb4",
-  multipleStatements: true
-});
+  multipleStatements: true,
+  connectTimeout: 20000,
+  waitForConnections: true,
+  connectionLimit: 15,
+  queueLimit: 0
+}));
 
 const schemaPath = path.join(__dirname, "../schema.sql");
 
@@ -49,13 +57,8 @@ function ensureColumn(table, column, definition, expectedType, callback) {
       if (rows.length === 0) {
         runQuerySafe(`ALTER TABLE ${table} ADD COLUMN ${definition}`, `${table}.${column}`, callback);
       } else {
-        const type = (rows[0].DATA_TYPE || rows[0].data_type || "").toLowerCase();
-        if (expectedType && type !== expectedType.toLowerCase()) {
-          runQuerySafe(`ALTER TABLE ${table} MODIFY COLUMN ${definition}`, `${table}.${column} type`, callback);
-        } else {
-          console.log(`✅ ${table}.${column} exists`);
-          callback(null);
-        }
+        console.log(`✅ ${table}.${column} exists`);
+        callback(null);
       }
     }
   );
@@ -627,6 +630,9 @@ async function ensureTablesAndColumns() {
     { table: "call_reports", column: "carry_forward_date", definition: "carry_forward_date DATE NULL" },
     { table: "call_reports", column: "travel_start_time", definition: "travel_start_time TIME DEFAULT NULL" },
     { table: "call_reports", column: "travel_reach_time", definition: "travel_reach_time TIME DEFAULT NULL" },
+    { table: "call_reports", column: "travel_duration", definition: "travel_duration INT DEFAULT NULL" },
+    { table: "call_reports", column: "start_km", definition: "start_km DECIMAL(10,2) DEFAULT NULL" },
+    { table: "call_reports", column: "end_km", definition: "end_km DECIMAL(10,2) DEFAULT NULL" },
     { table: "call_reports", column: "scheduled_time", definition: "scheduled_time TIME DEFAULT NULL" },
     { table: "call_reports", column: "delivery_call_type", definition: "delivery_call_type VARCHAR(50) DEFAULT NULL" },
     { table: "call_reports", column: "delivery_project_work", definition: "delivery_project_work DECIMAL(10,2) DEFAULT 0" },
@@ -918,6 +924,9 @@ async function ensureTablesAndColumns() {
     }
   }
 
+  // Heavy bulk sync commented out to prevent startup table locks
+  // Individual routes handle client sync on creation/update
+  /*
   try {
     await queryAsync(`
       INSERT INTO clients (name, email, phone, city, gst_number, created_by)
@@ -933,6 +942,7 @@ async function ensureTablesAndColumns() {
   } catch (e) {
     console.log("Customer-to-client sync skip:", e.message);
   }
+  */
 }
 
 function queryAsync(sql, params = []) {
@@ -1054,75 +1064,97 @@ async function seedDefaultEmployees() {
   console.log("Default employees seeded successfully.");
 }
 
-const ready = new Promise((resolve, reject) => {
-  db.connect((err) => {
-    if (err) {
-      console.error("MySQL connection failed:", err.message);
-      return reject(err);
-    }
-    console.log(`MySQL Connected (${process.env.DB_HOST}:${dbPort})`);
-
-    db.query(
-      `CREATE DATABASE IF NOT EXISTS \`${escapedDbName}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
-      async (err) => {
+function connectWithRetry(attemptsLeft = 10, delayMs = 2500) {
+  return new Promise((resolve, reject) => {
+    function tryConnect(remainingAttempts) {
+      // A pool has no .connect() — grab one connection to prove the server is up,
+      // then hand it straight back.
+      db.getConnection((err, conn) => {
+        if (conn) conn.release();
         if (err) {
-          console.error(`Database creation failed for ${dbName}:`, err.message);
-          return reject(err);
-        }
-
-        db.changeUser({ database: dbName }, async (err) => {
-          if (err) {
-            console.error(`Database selection failed for ${dbName}:`, err.message);
+          console.error(`⚠️ MySQL connection attempt failed (${err.code || err.message}). Remaining attempts: ${remainingAttempts - 1}`);
+          if (remainingAttempts <= 1) {
+            console.error("❌ All MySQL connection attempts exhausted.");
             return reject(err);
           }
-          console.log(`Using database ${dbName}`);
+          setTimeout(() => tryConnect(remainingAttempts - 1), delayMs);
+        } else {
+          resolve();
+        }
+      });
+    }
+    tryConnect(attemptsLeft);
+  });
+}
 
-          if (fs.existsSync(schemaPath)) {
-            const schema = fs.readFileSync(schemaPath, "utf8");
-            
-            // Temporarily disable foreign key checks to prevent referenced table/foreign key errors on clean installs
-            db.query("SET FOREIGN_KEY_CHECKS = 0;", (fkErr) => {
-              if (fkErr) {
-                console.error("Failed to disable foreign key checks:", fkErr.message);
-                return reject(fkErr);
-              }
+const ready = new Promise((resolve, reject) => {
+  connectWithRetry(10, 2500)
+    .then(() => {
+      console.log(`MySQL Connected (${process.env.DB_HOST}:${dbPort})`);
+
+      db.query(
+        `CREATE DATABASE IF NOT EXISTS \`${escapedDbName}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+        async (err) => {
+          if (err) {
+            console.error(`Database creation failed for ${dbName}:`, err.message);
+            return reject(err);
+          }
+
+          // Every pooled connection already opens with `database` set (see createPool),
+          // so there is no per-connection changeUser left to do.
+          await (async () => {
+            console.log(`Using database ${dbName}`);
+
+
+            if (fs.existsSync(schemaPath)) {
+              const schema = fs.readFileSync(schemaPath, "utf8");
               
-              db.query(schema, (err) => {
-                // Always restore foreign key checks
-                db.query("SET FOREIGN_KEY_CHECKS = 1;", async (fkRestoreErr) => {
-                  if (err) {
-                    console.error("Database initialization failed:", err.message);
-                    return reject(err);
-                  }
-                  if (fkRestoreErr) {
-                    console.error("Failed to re-enable foreign key checks:", fkRestoreErr.message);
-                    return reject(fkRestoreErr);
-                  }
-                  
-                  console.log("Database initialized successfully");
-                  try {
-                    await ensureTablesAndColumns();
-                    await seedDefaultEmployees();
-                    resolve(db);
-                  } catch (migrationErr) {
-                    reject(migrationErr);
-                  }
+              // Temporarily disable foreign key checks to prevent referenced table/foreign key errors on clean installs
+              db.query("SET FOREIGN_KEY_CHECKS = 0;", (fkErr) => {
+                if (fkErr) {
+                  console.error("Failed to disable foreign key checks:", fkErr.message);
+                  return reject(fkErr);
+                }
+                
+                db.query(schema, (err) => {
+                  // Always restore foreign key checks
+                  db.query("SET FOREIGN_KEY_CHECKS = 1;", async (fkRestoreErr) => {
+                    if (err) {
+                      console.error("Database initialization failed:", err.message);
+                      return reject(err);
+                    }
+                    if (fkRestoreErr) {
+                      console.error("Failed to re-enable foreign key checks:", fkRestoreErr.message);
+                      return reject(fkRestoreErr);
+                    }
+                    
+                    console.log("Database initialized successfully");
+                    try {
+                      await ensureTablesAndColumns();
+                      await seedDefaultEmployees();
+                      resolve(db);
+                    } catch (migrationErr) {
+                      reject(migrationErr);
+                    }
+                  });
                 });
               });
-            });
-          } else {
-            try {
-              await ensureTablesAndColumns();
-              await seedDefaultEmployees();
-              resolve(db);
-            } catch (migrationErr) {
-              reject(migrationErr);
+            } else {
+              try {
+                await ensureTablesAndColumns();
+                await seedDefaultEmployees();
+                resolve(db);
+              } catch (migrationErr) {
+                reject(migrationErr);
+              }
             }
-          }
-        });
-      }
-    );
-  });
+          })().catch(reject);
+        }
+      );
+    })
+    .catch((err) => {
+      reject(err);
+    });
 });
 
 db.ready = ready;

@@ -105,7 +105,15 @@ const Fields = () => {
 
   useEffect(() => {
     fetchFields(); fetchMissedCounts();
-    axios.get(`${API}/api/teammember`, getAuthConfig()).then(r => setTeamMembers(r.data)).catch(() => { });
+    axios.get(`${API}/api/teammember?excludeEngineers=true`, getAuthConfig()).then(r => {
+      const nonEngineers = (r.data || []).filter(
+        (t) =>
+          (t.emp_role || "").toLowerCase() !== "engineer" &&
+          (t.emp_role || "").toLowerCase() !== "eng" &&
+          !(t.job_title || "").toLowerCase().includes("engineer")
+      );
+      setTeamMembers(nonEngineers);
+    }).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -336,7 +344,7 @@ const Fields = () => {
       setOpen(true);
     } catch (err) {
       console.error(err);
-      alert("Failed to load field data");
+      alert(err.response?.data?.message || err.response?.data?.error || err.message || "Failed to load field data");
     }
   };
 
@@ -694,14 +702,21 @@ const Fields = () => {
                   <select name="staff_name" value={form.staff_name} onChange={handleChange}
                     className="border rounded-md px-3 py-2 outline-none bg-white w-full text-sm">
                     <option value="">-- Select Staff --</option>
-                    {teamMembers.map((t) => {
-                      const fullName = `${t.first_name} ${t.last_name || ""}`.trim();
-                      return (
-                        <option key={t.id} value={fullName}>
-                          {fullName}
-                        </option>
-                      );
-                    })}
+                    {teamMembers
+                      .filter(
+                        (t) =>
+                          (t.emp_role || "").toLowerCase() !== "engineer" &&
+                          (t.emp_role || "").toLowerCase() !== "eng" &&
+                          !(t.job_title || "").toLowerCase().includes("engineer")
+                      )
+                      .map((t) => {
+                        const fullName = `${t.first_name} ${t.last_name || ""}`.trim();
+                        return (
+                          <option key={t.id} value={fullName}>
+                            {fullName}
+                          </option>
+                        );
+                      })}
                   </select>
                 </div>
               </div>

@@ -2,12 +2,21 @@
 
 const path = require("path");
 const fs = require("fs");
+const { gstSummary } = require("./gstSummary");
 
-const LOGO_PATH = path.resolve(__dirname, "../../frontend/src/layout/Madhura-logo.png");
+const LOGO_PATH = path.resolve(__dirname, "../../frontend/src/images/achme logo high.jpg.jpeg");
+const ALT_LOGO_PATH = path.resolve(__dirname, "../../frontend/src/images/achme-logo-high.jpeg");
+
 let LOGO_B64 = "";
-try { LOGO_B64 = fs.readFileSync(LOGO_PATH).toString("base64"); } catch (_) { }
-const LOGO_SRC = LOGO_B64 ? `data:image/png;base64,${LOGO_B64}` : "";
+try {
+  if (fs.existsSync(LOGO_PATH)) {
+    LOGO_B64 = fs.readFileSync(LOGO_PATH).toString("base64");
+  } else if (fs.existsSync(ALT_LOGO_PATH)) {
+    LOGO_B64 = fs.readFileSync(ALT_LOGO_PATH).toString("base64");
+  }
+} catch (_) { }
 
+const LOGO_SRC = LOGO_B64 ? `data:image/jpeg;base64,${LOGO_B64}` : "";
 const BRAND_SRC = LOGO_SRC;
 
 function esc(v) {
@@ -32,9 +41,71 @@ const BRANCHES = {
   Chennai: { name: "Chennai", address: "5th Floor, 5CD PM Towers, Greams Road, Thousand Lights, Chennai-600006", gstin: "33AAHFA7876M1ZX" },
 };
 
-async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
-  const puppeteer = require("puppeteer");
+// Launching Chrome costs 1-3s and ~300MB, and this file renders the PDF three times
+// per document (two pagination probes + the real one). Doing that per request made a
+// single download take ~10s and a few concurrent ones knock the server over.
+// One browser is launched lazily and shared; each request only opens a tab.
+let browserPromise = null;
 
+async function launchBrowser() {
+  const puppeteer = require("puppeteer");
+  const launchOptions = {
+    headless: true,
+    args: ["--disable-gpu", "--disable-extensions", "--disable-software-rasterizer", "--no-sandbox"],
+    // Puppeteer waits 30s per launch by default, and this falls through up to 6 candidate
+    // browsers — 3 minutes, past nginx's 120s proxy_read_timeout, so a broken Chrome
+    // install showed up as a 504 on download instead of "install Chrome".
+    timeout: 10000,
+  };
+
+  try {
+    return await puppeteer.launch(launchOptions);
+  } catch (launchErr) {
+    console.warn("⚠️ Standard Puppeteer launch failed. Attempting system browser fallback...", launchErr.message);
+
+    const possiblePaths = [
+      // Chrome standard paths on Windows
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+      path.join(process.env.LOCALAPPDATA || "", "Google\\Chrome\\Application\\chrome.exe"),
+      // Edge standard paths (Chromium-based, completely compatible!)
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ];
+
+    for (const execPath of possiblePaths) {
+      if (fs.existsSync(execPath)) {
+        try {
+          const browser = await puppeteer.launch({ ...launchOptions, executablePath: execPath });
+          console.log(`🚀 System browser fallback successful using: ${execPath}`);
+          return browser;
+        } catch (err) {
+          console.warn(`Failed to launch system browser at ${execPath}:`, err.message);
+        }
+      }
+    }
+
+    throw new Error("Could not launch Puppeteer. Please install Google Chrome or Edge, or run 'npx puppeteer browsers install chrome' in your terminal. Details: " + launchErr.message);
+  }
+}
+
+async function getBrowser() {
+  const pending = browserPromise;
+  if (pending) {
+    try {
+      const browser = await pending;
+      if (browser.connected) return browser;
+    } catch (_) { /* previous launch failed — fall through and retry below */ }
+    // Concurrent downloads all awaken here when a shared browser dies. Without this
+    // check each one starts its own launch and every browser but the last is orphaned,
+    // leaking a ~300MB Chrome per failed download.
+    if (browserPromise !== pending) return getBrowser();
+  }
+  browserPromise = launchBrowser();
+  return browserPromise;
+}
+
+async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
   const TYPE_MAP = {
     quotation: { label: "QUOTATION", prefix: "QT" },
     proforma: { label: "PROFORMA INVOICE", prefix: "PI" },
@@ -84,12 +155,12 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
   else if (h.tax_type === "GST5") taxRate = 5;
   else if (h.tax_type === "NONE" || h.tax_type === "Without GST") taxRate = 0;
 
-  const subtotal = Number(h.subtotal || 0);
-  const totalDiscount = Number(h.total_discount || 0);
+  const summary = gstSummary(h, items || []);
+  const totalDiscount = summary.discount;
   const totalCGST = Number(h.total_cgst || 0);
   const totalSGST = Number(h.total_sgst || 0);
   const totalIGST = Number(h.total_igst || 0);
-  const grandTotal = Number(h.grand_total || 0) || (subtotal - totalDiscount + totalCGST + totalSGST + totalIGST);
+  const grandTotal = summary.grandTotal;
 
   const hasGST = taxRate > 0 || totalCGST > 0 || totalSGST > 0 || totalIGST > 0;
   const showCGST = totalCGST > 0;
@@ -97,7 +168,8 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
   const showIGST = totalIGST > 0;
   const showDiscount = totalDiscount > 0;
 
-  const gstModeStr = h.gst_mode || "Exclusive";
+  const totalTaxAmount = summary.gstAmount;
+  const gstModeStr = summary.mode;
 
   let showBreakdown = true;
   try {
@@ -110,7 +182,7 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
   } catch (_) { }
 
   let gstRows = "";
-  if (gstModeStr !== "Exempt" && gstModeStr !== "Without GST") {
+  if (gstModeStr !== "Exempt" && gstModeStr !== "Tax Extra" && gstModeStr !== "Without GST") {
     if (showBreakdown) {
       const groups = {};
       (items || []).forEach(r => {
@@ -123,8 +195,7 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
 
         let gstAmount = 0;
         if (gstModeStr === "Inclusive") {
-          const taxableValue = base / (1 + taxRate / 100);
-          gstAmount = base - taxableValue;
+          gstAmount = (base * taxRate) / 100;
         } else {
           gstAmount = (base * taxRate) / 100;
         }
@@ -180,7 +251,16 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
   const terms = [];
   let attachedImages = [];
   if (h.terms_general) { /* General T&C — checkbox only, no body text */ }
-  if (h.terms_tax) terms.push("Prices quoted are exclusive of Sales and Service Tax.");
+  const mode = h.gst_mode || (h.terms_tax === 1 || h.terms_tax === true || h.terms_tax === "1" || h.terms_tax === "true" ? "Exempt" : "Exclusive");
+  if (mode === "Inclusive") {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  } else if (mode === "Exempt") {
+    terms.push("Prices quoted are exempt of Sales and Service Tax.");
+  } else if (mode === "Tax Extra") {
+    terms.push("TAX EXTRA - Prices quoted are exclusive of Sales and Service Tax.");
+  } else {
+    terms.push("Prices quoted are inclusive of Sales and Service Tax.");
+  }
   if (h.terms_project_period) terms.push(`Project Period: ${esc(h.terms_project_period)}`);
   if (h.terms_validity) terms.push(`Quote valid for ${esc(h.terms_validity)} from quotation date.`);
   try {
@@ -263,11 +343,15 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
 
   const termsListItems = terms.map((t) => `<li style="margin-bottom:4px;">${t}</li>`).join("");
 
+  const pdfSubtotal = summary.subtotal;
+  const pdfTotalTax = totalTaxAmount;
+
   const summaryRows = `
-    <tr><td style="width:50%">Subtotal</td><td style="width:50%">${fmtNum(subtotal)}</td></tr>
+    <tr><td style="width:50%">Subtotal</td><td style="width:50%">${fmtNum(pdfSubtotal)}</td></tr>
     ${showDiscount ? `<tr><td>Discount</td><td>${fmtNum(totalDiscount)}</td></tr>` : ""}
     ${gstRows}
     ${!hasGST ? `<tr><td style="color:#64748b;font-size:10px;">Without GST</td><td></td></tr>` : ""}
+    ${gstModeStr !== "Exempt" && pdfTotalTax > 0 ? `<tr><td style="color:#166534;font-weight:600;">Total GST</td><td style="color:#166534;font-weight:700;">${fmtNum(pdfTotalTax)}</td></tr>` : ""}
     <tr class="ft-grand-total"><td style="width:50%">GRAND TOTAL</td><td style="width:50%">${fmtNum(grandTotal)}</td></tr>
     <tr><td colspan="2" style="font-size:10px;color:#64748b;font-style:italic;text-align:right;padding:4px 6px 6px 6px;"><strong>Amount in Words:</strong> ${numberToWords(grandTotal)}</td></tr>`;
 
@@ -651,51 +735,10 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
 </body>
 </html>`;
 
-  let browser;
-  const launchOptions = {
-    headless: true,
-    args: ["--disable-gpu", "--disable-extensions", "--disable-software-rasterizer", "--no-sandbox"],
-  };
+  const browser = await getBrowser();
+  const page = await browser.newPage();
 
   try {
-    browser = await puppeteer.launch(launchOptions);
-  } catch (launchErr) {
-    console.warn("⚠️ Standard Puppeteer launch failed. Attempting system browser fallback...", launchErr.message);
-
-    const possiblePaths = [
-      // Chrome standard paths on Windows
-      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-      path.join(process.env.LOCALAPPDATA || "", "Google\\Chrome\\Application\\chrome.exe"),
-      // Edge standard paths (Chromium-based, completely compatible!)
-      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    ];
-
-    let launched = false;
-    for (const execPath of possiblePaths) {
-      if (fs.existsSync(execPath)) {
-        try {
-          browser = await puppeteer.launch({
-            ...launchOptions,
-            executablePath: execPath,
-          });
-          console.log(`🚀 System browser fallback successful using: ${execPath}`);
-          launched = true;
-          break;
-        } catch (err) {
-          console.warn(`Failed to launch system browser at ${execPath}:`, err.message);
-        }
-      }
-    }
-
-    if (!launched) {
-      throw new Error("Could not launch Puppeteer. Please install Google Chrome or Edge, or run 'npx puppeteer browsers install chrome' in your terminal. Details: " + launchErr.message);
-    }
-  }
-
-  try {
-    const page = await browser.newPage();
     await page.setViewport({ width: 794, height: 1123, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.evaluate(async () => {
@@ -885,7 +928,8 @@ async function generateInvoicePdf({ invoice, items, type, label, prefix }) {
     const finalPdf = await pdfDoc.save();
     return Buffer.from(finalPdf);
   } finally {
-    await browser.close();
+    // Close only the tab — the browser stays up for the next request.
+    await page.close().catch(() => { });
   }
 }
 

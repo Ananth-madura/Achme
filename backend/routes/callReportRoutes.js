@@ -465,7 +465,7 @@ router.post("/", verifyToken, canEditCallReport, (req, res) => {
       priority, status, report_date,
       start_time, end_time, assigned_time, actual_duration, duration_limit, is_exceeded,
       travel_start_time, travel_reach_time, travel_duration,
-      km, petrol_charges, spare_parts_price, labour_charges, delivery_call_type, delivery_project_work, total_expenses,
+      km, start_km, end_km, petrol_charges, spare_parts_price, labour_charges, delivery_call_type, delivery_project_work, total_expenses,
       payment_type, invoice_value, payment_status,
       remarks, step2_completed, created_by
     ) VALUES (
@@ -479,7 +479,7 @@ router.post("/", verifyToken, canEditCallReport, (req, res) => {
       ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
-      ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?
     )
@@ -531,6 +531,8 @@ router.post("/", verifyToken, canEditCallReport, (req, res) => {
         travelReachRaw,
         travelDuration,
         c.km != null && c.km !== "" ? parseFloat(c.km) : null,
+        c.start_km != null && c.start_km !== "" ? parseFloat(c.start_km) : null,
+        c.end_km != null && c.end_km !== "" ? parseFloat(c.end_km) : null,
         parseFloat(c.petrol_charges) || 0,
         parseFloat(c.spare_parts_price) || 0,
         parseFloat(c.labour_charges) || 0,
@@ -642,7 +644,12 @@ router.put("/:id", verifyToken, canEditCallReport, (req, res) => {
     }
 
     const isCompleted = newStep2 === 1 && c.status === "Closed";
-    const completedAt = isCompleted ? new Date().toISOString().slice(0, 19).replace("T", " ") : null;
+    const getLocalDatetime = () => {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    const completedAt = isCompleted ? (c.completed_at || current.completed_at || getLocalDatetime()) : null;
 
     const totalExpenses =
       (c.petrol_charges !== undefined ? (parseFloat(c.petrol_charges) || 0) : (parseFloat(current.petrol_charges) || 0)) +
@@ -700,6 +707,8 @@ router.put("/:id", verifyToken, canEditCallReport, (req, res) => {
         travel_reach_time = ?,
         travel_duration  = ?,
         km               = ?,
+        start_km         = ?,
+        end_km           = ?,
         petrol_charges   = ?,
         spare_parts_price= ?,
         labour_charges   = ?,
@@ -753,6 +762,8 @@ router.put("/:id", verifyToken, canEditCallReport, (req, res) => {
       travelReachRaw2 !== null ? travelReachRaw2 : (current.travel_reach_time || null),
       travelDuration2 !== null ? travelDuration2 : (current.travel_duration !== undefined ? current.travel_duration : null),
       c.km !== undefined && c.km !== "" && c.km != null ? parseFloat(c.km) : current.km,
+      c.start_km !== undefined && c.start_km !== "" && c.start_km != null ? parseFloat(c.start_km) : (current.start_km || null),
+      c.end_km !== undefined && c.end_km !== "" && c.end_km != null ? parseFloat(c.end_km) : (current.end_km || null),
       parseFloat(c.petrol_charges) || current.petrol_charges || 0,
       parseFloat(c.spare_parts_price) || current.spare_parts_price || 0,
       parseFloat(c.labour_charges) || current.labour_charges || 0,

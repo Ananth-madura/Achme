@@ -268,9 +268,14 @@ router.post("/import", verifyToken, async (req, res) => {
     return res.status(400).json({ message: "No client data provided or invalid format." });
   }
 
+  // ponytail: this route is promise-based, and the async context the db.beginTransaction
+  // shim relies on does not survive `await` on a promise resolved elsewhere (see
+  // config/txnShim.js). So it holds its own pool connection for the whole import.
+  let txnConn = null;
+
   const queryAsync = (sql, params) => {
     return new Promise((resolve, reject) => {
-      db.query(sql, params, (err, results) => {
+      (txnConn || db).query(sql, params, (err, results) => {
         if (err) return reject(err);
         resolve(results);
       });
@@ -279,29 +284,38 @@ router.post("/import", verifyToken, async (req, res) => {
 
   const beginTransactionAsync = () => {
     return new Promise((resolve, reject) => {
-      db.beginTransaction((err) => {
+      db.getConnection((err, conn) => {
         if (err) return reject(err);
-        resolve();
+        conn.beginTransaction((txnErr) => {
+          if (txnErr) {
+            conn.release();
+            return reject(txnErr);
+          }
+          txnConn = conn;
+          resolve();
+        });
       });
     });
   };
 
-  const commitAsync = () => {
+  // Both exit paths can run (commit throws -> catch rolls back), and releasing a
+  // connection twice hands one socket to two requests. Clearing txnConn first means
+  // only the first caller ever releases it.
+  const endTransactionAsync = (method) => {
     return new Promise((resolve, reject) => {
-      db.commit((err) => {
-        if (err) return reject(err);
+      const conn = txnConn;
+      if (!conn) return resolve();
+      txnConn = null;
+      conn[method]((err) => {
+        conn.release();
+        if (err && method === "commit") return reject(err);
         resolve();
       });
     });
   };
 
-  const rollbackAsync = () => {
-    return new Promise((resolve) => {
-      db.rollback(() => {
-        resolve();
-      });
-    });
-  };
+  const commitAsync = () => endTransactionAsync("commit");
+  const rollbackAsync = () => endTransactionAsync("rollback");
 
   try {
     // Start transaction

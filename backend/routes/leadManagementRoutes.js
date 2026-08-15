@@ -3,7 +3,27 @@ const router = express.Router();
 const db = require("../config/database");
 const { verifyToken, isAdmin } = require("../middleware/authMiddleware");
 const { getNotificationIO } = require("../sockets/notifications");
-const toDateOnly = (val) => (!val ? null : val.toString().slice(0, 10));
+const toDateOnly = (val) => {
+  if (!val) return null;
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = val.toString().trim();
+  if (!s) return null;
+  const ymd = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/.exec(s);
+  if (ymd) {
+    return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
+  }
+  const dmy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(s);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  }
+  return s.slice(0, 10);
+};
 const toTimeOnly = (val) => {
   if (!val) return null;
   const s = val.toString().trim();
@@ -220,6 +240,75 @@ router.put("/followups/:id", verifyToken, (req, res) => {
   db.query("UPDATE lead_followups SET status=? WHERE id=?", [status, req.params.id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: "Updated" });
+  });
+});
+
+// GET list of follow-ups across all lead types filtered by type (Todays, Due, Overdue, or All)
+router.get("/followups", verifyToken, (req, res) => {
+  const { type } = req.query;
+  const { id: user_id, role } = req.user;
+  const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD local
+
+  let dateCondition = "";
+  if (type === "Todays") {
+    dateCondition = "AND t.followup_date = ?";
+  } else if (type === "Due") {
+    dateCondition = "AND t.followup_date > ?";
+  } else if (type === "Overdue") {
+    dateCondition = "AND t.followup_date < ?";
+  }
+
+  let dateConditionW = dateCondition.replace(/t\./g, "w.");
+  let dateConditionF = dateCondition.replace(/t\./g, "f.");
+
+  let sql = `
+    SELECT 
+      t.id, 'telecall' AS lead_type, t.customer_name, t.company_name, t.mobile_number, 
+      t.followup_date, t.followup_notes, t.staff_name
+    FROM telecalls t
+    WHERE (t.followup_required = 'Yes' OR t.followup_date IS NOT NULL) ${dateCondition}
+    ${role === 'employee' ? 'AND t.user_id = ?' : ''}
+    
+    UNION ALL
+    
+    SELECT 
+      w.id, 'walkin' AS lead_type, w.customer_name, w.company_name, w.mobile_number, 
+      w.followup_date, w.followup_notes, w.staff_name
+    FROM walkins w
+    WHERE (w.followup_required = 'Yes' OR w.followup_date IS NOT NULL) ${dateConditionW}
+    ${role === 'employee' ? 'AND w.user_id = ?' : ''}
+    
+    UNION ALL
+    
+    SELECT 
+      f.id, 'field' AS lead_type, f.customer_name, f.company_name, f.mobile_number, 
+      f.followup_date, f.followup_notes, f.staff_name
+    FROM fields f
+    WHERE (f.followup_required = 'Yes' OR f.followup_date IS NOT NULL) ${dateConditionF}
+    ${role === 'employee' ? 'AND f.user_id = ?' : ''}
+
+    ORDER BY followup_date ASC
+  `;
+
+  let params = [];
+  if (type === "Todays" || type === "Due" || type === "Overdue") {
+    params.push(today);
+    if (role === 'employee') params.push(user_id);
+    params.push(today);
+    if (role === 'employee') params.push(user_id);
+    params.push(today);
+    if (role === 'employee') params.push(user_id);
+  } else {
+    if (role === 'employee') params.push(user_id, user_id, user_id);
+  }
+
+  db.query(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const formatted = (rows || []).map(r => ({
+      ...r,
+      followup_date: toDateOnly(r.followup_date)
+    }));
+    res.json(formatted);
   });
 });
 
@@ -455,13 +544,21 @@ router.put("/escalations/:id/resolve", verifyToken, (req, res) => {
 
 // GET activity log for a lead
 router.get("/activity/:leadType/:leadId", verifyToken, (req, res) => {
-  const { id: user_id, role } = req.user;
+  const { id: user_id, role, name: user_name } = req.user;
   if (role === 'employee') {
     const tableMap = { telecall: "telecalls", walkin: "walkins", field: "fields" };
     const leadTable = tableMap[req.params.leadType];
     if (leadTable) {
-      db.query(`SELECT created_by FROM ${leadTable} WHERE id = ?`, [req.params.leadId], (err, rows) => {
-        if (err || rows.length === 0 || rows[0].created_by !== user_id) {
+      db.query(`SELECT created_by, assigned_to, staff_name FROM ${leadTable} WHERE id = ?`, [req.params.leadId], (err, rows) => {
+        if (err || rows.length === 0) return res.status(404).json({ message: "Not found" });
+        const lead = rows[0];
+        const isAuth = (
+          Number(lead.created_by) === Number(user_id) ||
+          Number(lead.assigned_to) === Number(user_id) ||
+          !lead.assigned_to ||
+          (user_name && lead.staff_name && lead.staff_name.toLowerCase().includes(user_name.toLowerCase()))
+        );
+        if (!isAuth) {
           return res.status(403).json({ message: "Access denied" });
         }
         db.query(

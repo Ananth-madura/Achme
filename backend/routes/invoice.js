@@ -16,6 +16,23 @@ router.post("/new", verifyToken, (req, res) => {
   );
 });
 
+// GET ALL INVOICES
+router.get("/", verifyToken, (req, res) => {
+  const { id: user_id, role } = req.user;
+  const sql = `
+    SELECT i.id, i.client_company, DATE_FORMAT(i.invoice_date, '%Y-%m-%d') AS invoice_date, DATE_FORMAT(i.invoice_duedate, '%Y-%m-%d') AS invoice_duedate, i.project_names, i.category,
+      IFNULL(SUM(p.amount), 0) AS paid_amount
+    FROM clientinvoices i
+    LEFT JOIN payments p ON p.invoice_id = i.id
+    ${role === 'employee' ? `WHERE i.created_by = ?` : ''}
+    GROUP BY i.id ORDER BY i.id DESC`;
+  const params = role === 'employee' ? [user_id] : [];
+  db.query(sql, params, (err, results) => {
+    if (err) { console.error(err); return res.status(500).json({ message: "Fetch failed" }); }
+    res.json(results);
+  });
+});
+
 // GET ALL WITH PAYMENTS
 router.get("/with-payments", verifyToken, (req, res) => {
   const { id: user_id, role } = req.user;

@@ -655,8 +655,16 @@ const Clients = () => {
     // Fetch team members
     const token = localStorage.getItem("token");
     const config = { headers: { Authorization: `Bearer ${token}` } };
-    axios.get(`${API}/api/teammember`, config)
-      .then(r => setTeamMembers(r.data))
+    axios.get(`${API}/api/teammember?excludeEngineers=true`, config)
+      .then(r => {
+        const nonEngineers = (r.data || []).filter(
+          (t) =>
+            (t.emp_role || "").toLowerCase() !== "engineer" &&
+            (t.emp_role || "").toLowerCase() !== "eng" &&
+            !(t.job_title || "").toLowerCase().includes("engineer")
+        );
+        setTeamMembers(nonEngineers);
+      })
       .catch(e => console.error("Error fetching team members:", e));
 
     return () => window.removeEventListener("refresh-clients", handleRefresh);
@@ -1918,9 +1926,16 @@ const Clients = () => {
                 <select name="assigned_teammember_id" value={form.assigned_teammember_id} onChange={handleChange}
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-white outline-none" style={{ borderColor: N.hairlineStrong, color: N.ink }}>
                   <option value="">Unassigned</option>
-                  {teamMembers.map(t => (
-                    <option key={t.id} value={t.id}>{t.first_name} {t.last_name || ""} ({t.emp_role || "Staff"})</option>
-                  ))}
+                  {teamMembers
+                    .filter(
+                      (t) =>
+                        (t.emp_role || "").toLowerCase() !== "engineer" &&
+                        (t.emp_role || "").toLowerCase() !== "eng" &&
+                        !(t.job_title || "").toLowerCase().includes("engineer")
+                    )
+                    .map(t => (
+                      <option key={t.id} value={t.id}>{t.first_name} {t.last_name || ""} ({t.emp_role || "Staff"})</option>
+                    ))}
                 </select>
               </div>
 

@@ -641,9 +641,13 @@ const Reports = () => {
                             <span>Tasks (Completed/Total)</span>
                             <span className="font-bold text-gray-800">{emp.tasksCompleted} / {emp.tasksAssigned}</span>
                           </div>
-                          <div className="flex items-center justify-between text-xs text-gray-500">
+                          <div className="flex items-center justify-between text-xs text-gray-500 border-b border-gray-100 pb-1.5">
                             <span>Services Delivered</span>
                             <span className="font-bold text-gray-800">{emp.services}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <span>Travel Distance</span>
+                            <span className="font-extrabold text-blue-600">{(emp.totalKm || 0).toFixed(1)} km</span>
                           </div>
                         </div>
                       </div>
@@ -676,6 +680,7 @@ const Reports = () => {
                       <th className="px-4 py-3 text-right">Conv%</th>
                       <th className="px-4 py-3 text-right">Tasks (Done/Total)</th>
                       <th className="px-4 py-3 text-right">Services</th>
+                      <th className="px-4 py-3 text-right">Travel KM</th>
                       <th className="px-4 py-3 text-right">Revenue</th>
                       <th className="px-4 py-3 text-right">Tasks%</th>
                     </tr>
@@ -700,6 +705,7 @@ const Reports = () => {
                         </td>
                         <td className="px-4 py-3.5 text-right text-gray-600 font-bold">{emp.tasksCompleted} / {emp.tasksAssigned}</td>
                         <td className="px-4 py-3.5 text-right text-gray-600 font-bold">{emp.services}</td>
+                        <td className="px-4 py-3.5 text-right text-blue-600 font-extrabold">{(emp.totalKm || 0).toFixed(1)} km</td>
                         <td className="px-4 py-3.5 text-right font-black text-green-600">₹{emp.serviceRevenue.toLocaleString()}</td>
                         <td className="px-4 py-3.5 text-right">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${emp.tasksAssigned > 0 && (emp.tasksCompleted / emp.tasksAssigned) >= 0.75
@@ -1099,14 +1105,18 @@ const Reports = () => {
             </div>
 
             <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Revenue Generated</p>
-                  <p className="text-lg font-black text-green-600 mt-1">₹{selectedEmployee.serviceRevenue.toLocaleString()}</p>
+                  <p className="text-base font-black text-green-600 mt-1">₹{selectedEmployee.serviceRevenue.toLocaleString()}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
                   <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Services Delivered</p>
-                  <p className="text-lg font-black text-indigo-600 mt-1">{selectedEmployee.services} Done</p>
+                  <p className="text-base font-black text-indigo-600 mt-1">{selectedEmployee.services} Done</p>
+                </div>
+                <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Travel Distance</p>
+                  <p className="text-base font-black text-blue-600 mt-1">{(selectedEmployee.totalKm || 0).toFixed(1)} KM</p>
                 </div>
               </div>
 

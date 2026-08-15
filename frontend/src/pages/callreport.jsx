@@ -508,6 +508,18 @@ const parseLocalDate = (dateVal) => {
   }
 };
 
+const toLocalDateISO = (dateVal) => {
+  if (!dateVal) return "";
+  const d = parseLocalDate(dateVal);
+  if (!d || isNaN(d.getTime())) {
+    return String(dateVal).split("T")[0] || "";
+  }
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const safeFormatDate = (dateVal) => {
   if (!dateVal) return "—";
   const d = parseLocalDate(dateVal);
@@ -899,7 +911,9 @@ const DetailModal = ({ call, onClose, formatCurrency }) => {
                 icon={MapPin}
                 label="Kilometers (KM)"
                 value={
-                  call.km != null && call.km !== "" ? `${call.km} km` : "0 km"
+                  call.km != null && call.km !== ""
+                    ? `${call.km} km${call.start_km && call.end_km ? ` (${call.start_km} → ${call.end_km})` : ""}`
+                    : "0 km"
                 }
               />
             </div>
@@ -1008,7 +1022,13 @@ const DetailModal = ({ call, onClose, formatCurrency }) => {
             </div>
             <div>
               <span className="font-bold">Completed At:</span>{" "}
-              {call.completed_at ? safeFormatDate(call.completed_at) : "—"}
+              {call.completed_at ? (() => {
+                const d = parseLocalDate(call.completed_at);
+                if (!d) return safeFormatDate(call.completed_at);
+                const h = String(d.getHours()).padStart(2, "0");
+                const m = String(d.getMinutes()).padStart(2, "0");
+                return `${safeFormatDate(call.completed_at)} at ${to12h(`${h}:${m}`)}`;
+              })() : "—"}
             </div>
           </div>
         </div>
@@ -1317,6 +1337,8 @@ const CallReport = () => {
     travel_start_time: "",
     travel_reach_time: "",
     km: "",
+    start_km: "",
+    end_km: "",
     duration: "",
     petrol_charges: "",
     spare_parts_price: "",
@@ -1805,7 +1827,7 @@ const CallReport = () => {
       session_id: call.session_id || "",
       call_sequence: call.call_sequence || 1,
       step2_completed: call.step2_completed || 0,
-      report_date: getLocalToday(),
+      report_date: toLocalDateISO(call.report_date || call.created_at) || getLocalToday(),
       scheduled_time: call.scheduled_time || "",
     });
     setStep2Form({
@@ -1815,6 +1837,8 @@ const CallReport = () => {
       travel_start_time: call.travel_start_time || "",
       travel_reach_time: call.travel_reach_time || "",
       km: call.km || "",
+      start_km: call.start_km || "",
+      end_km: call.end_km || "",
       petrol_charges: gt0(call.petrol_charges),
       spare_parts_price: gt0(call.spare_parts_price),
       labour_charges: gt0(call.labour_charges),
@@ -1851,6 +1875,8 @@ const CallReport = () => {
       travel_start_time: call.travel_start_time || "",
       travel_reach_time: call.travel_reach_time || "",
       km: call.km || "",
+      start_km: call.start_km || "",
+      end_km: call.end_km || "",
       duration: durStr,
       petrol_charges: gt0(call.petrol_charges),
       spare_parts_price: gt0(call.spare_parts_price),
@@ -1933,8 +1959,7 @@ const CallReport = () => {
               : form.duration === "2hr"
                 ? 120
                 : 30,
-        // Always use today's system date (no user selection, no UTC shifting)
-        report_date: getLocalToday(),
+        report_date: form.report_date || getLocalToday(),
         scheduled_time: form.scheduled_time || null,
       };
       if (isEdit && editId) {
@@ -2089,6 +2114,18 @@ const CallReport = () => {
             step2Form.km === undefined
             ? 0
             : parseFloat(step2Form.km) || 0,
+        start_km:
+          step2Form.start_km === "" ||
+            step2Form.start_km === null ||
+            step2Form.start_km === undefined
+            ? null
+            : parseFloat(step2Form.start_km) || null,
+        end_km:
+          step2Form.end_km === "" ||
+            step2Form.end_km === null ||
+            step2Form.end_km === undefined
+            ? null
+            : parseFloat(step2Form.end_km) || null,
         duration_limit: durLimit,
         assigned_time: durLimit,
         petrol_charges: parse0(step2Form.petrol_charges),
@@ -3061,9 +3098,9 @@ const CallReport = () => {
                     <th className="px-4 py-3 text-left">Customer</th>
                     <th className="px-4 py-3 text-center w-[90px]">Status</th>
                     <th className="px-4 py-3 text-center w-[90px]">Type</th>
-                    <th className="px-4 py-3 text-center w-[110px]">
+                    {/* <th className="px-4 py-3 text-center w-[110px]">
                       Completion
-                    </th>
+                    </th> */}
                     <th className="px-4 py-3 text-center w-[80px]">Duration</th>
                     <th className="px-4 py-3 text-center w-[90px]">Total</th>
                     <th className="px-4 py-3 text-center w-[90px]">Pay</th>
@@ -3077,7 +3114,7 @@ const CallReport = () => {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan="10"
+                        colSpan="9"
                         className="text-center py-12 text-muted-foreground"
                       >
                         Loading...
@@ -3086,7 +3123,7 @@ const CallReport = () => {
                   ) : filteredCalls.length === 0 ? (
                     <tr>
                       <td
-                        colSpan="10"
+                        colSpan="9"
                         className="text-center py-12 text-muted-foreground"
                       >
                         No call records found
@@ -3108,7 +3145,7 @@ const CallReport = () => {
                             className="bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer border-b border-border select-none"
                           >
                             <td
-                              colSpan="10"
+                              colSpan="9"
                               className="px-4 py-3 font-semibold text-sm"
                             >
                               <div className="flex items-center justify-between">
@@ -3266,51 +3303,9 @@ const CallReport = () => {
                                   <td className="px-4 py-3 text-xs text-center text-muted-foreground">
                                     {c.call_type || "—"}
                                   </td>
-                                  <td className="px-4 py-3 text-center">
-                                    {isComplete ? (
-                                      <div className="flex items-center justify-center gap-1.5">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800 border border-green-200">
-                                          Complete
-                                        </span>
-                                        {canEditDelete && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              openStep2Form(c);
-                                            }}
-                                            className="p-1 rounded-full bg-accent/10 text-accent hover:bg-accent/20 transition-colors border border-accent/20 hover:scale-105 active:scale-95 flex items-center justify-center"
-                                            title="Edit Details"
-                                          >
-                                            <Edit
-                                              size={12}
-                                              className="stroke-[2.5px]"
-                                            />
-                                          </button>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div className="flex items-center justify-center gap-1.5">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                                          Basic
-                                        </span>
-                                        {canEditDelete && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              openStep2Form(c);
-                                            }}
-                                            className="p-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 hover:scale-105 active:scale-95 flex items-center justify-center"
-                                            title="Complete Details"
-                                          >
-                                            <Plus
-                                              size={12}
-                                              className="stroke-[3px]"
-                                            />
-                                          </button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
+                                  {/* <td className="px-4 py-3 text-center">
+                                    {isComplete ? "Complete" : "Basic"}
+                                  </td> */}
                                   <td className="px-4 py-3 text-center">
                                     <span
                                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${c.is_exceeded ? "bg-red-100 text-red-700 border border-red-200" : "bg-accent/10 text-accent"}`}
@@ -3859,20 +3854,16 @@ const CallReport = () => {
                                     {c.completed_at ? (
                                       <>
                                         <div>
-                                          {new Date(
-                                            c.completed_at,
-                                          ).toLocaleDateString("en-IN", {
-                                            day: "2-digit",
-                                            month: "short",
-                                            year: "numeric",
-                                          })}
+                                          {safeFormatDate(c.completed_at)}
                                         </div>
                                         <div className="text-[10px]">
-                                          {to12h(
-                                            new Date(c.completed_at)
-                                              .toTimeString()
-                                              .slice(0, 5),
-                                          )}
+                                          {(() => {
+                                            const d = parseLocalDate(c.completed_at);
+                                            if (!d) return "—";
+                                            const h = String(d.getHours()).padStart(2, "0");
+                                            const m = String(d.getMinutes()).padStart(2, "0");
+                                            return to12h(`${h}:${m}`);
+                                          })()}
                                         </div>
                                       </>
                                     ) : c.scheduled_time ? (
@@ -5327,7 +5318,7 @@ const CallReport = () => {
                   <FormField label="Scheduled Date" icon={Calendar} required>
                     <input
                       type="date"
-                      value={getLocalToday()}
+                      value={form.report_date || getLocalToday()}
                       disabled
                       className={`${inputBase} opacity-80 cursor-not-allowed`}
                     />
@@ -5857,20 +5848,98 @@ const CallReport = () => {
                       })()}
                     </div>
                   </div>
-                  <FormField label="Kilometers (KM)" icon={MapPin}>
-                    <input
-                      type="number"
-                      value={step2Form.km}
-                      onChange={(e) =>
-                        setStep2Form({ ...step2Form, km: e.target.value })
+                  <div className="col-span-full bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MapPin className="w-4 h-4 text-indigo-600" />
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Kilometer Reading (Odometer)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Start KM Reading
+                        </label>
+                        <input
+                          type="number"
+                          value={step2Form.start_km || ""}
+                          onChange={(e) => {
+                            const newStart = e.target.value;
+                            const startVal = parseFloat(newStart);
+                            const endVal = parseFloat(step2Form.end_km);
+                            let newKm = step2Form.km;
+                            if (newStart !== "" && step2Form.end_km !== "" && !isNaN(startVal) && !isNaN(endVal) && endVal >= startVal) {
+                              const diff = endVal - startVal;
+                              newKm = Number.isInteger(diff) ? String(diff) : diff.toFixed(1);
+                            }
+                            setStep2Form({ ...step2Form, start_km: newStart, km: newKm });
+                          }}
+                          className={inputBase}
+                          placeholder="e.g. 12323"
+                          disabled={!canEditDelete}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          End KM Reading
+                        </label>
+                        <input
+                          type="number"
+                          value={step2Form.end_km || ""}
+                          onChange={(e) => {
+                            const newEnd = e.target.value;
+                            const startVal = parseFloat(step2Form.start_km);
+                            const endVal = parseFloat(newEnd);
+                            let newKm = step2Form.km;
+                            if (step2Form.start_km !== "" && newEnd !== "" && !isNaN(startVal) && !isNaN(endVal) && endVal >= startVal) {
+                              const diff = endVal - startVal;
+                              newKm = Number.isInteger(diff) ? String(diff) : diff.toFixed(1);
+                            }
+                            setStep2Form({ ...step2Form, end_km: newEnd, km: newKm });
+                          }}
+                          className={inputBase}
+                          placeholder="e.g. 12342"
+                          disabled={!canEditDelete}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Total Travel (KM)
+                        </label>
+                        <input
+                          type="number"
+                          value={step2Form.km || ""}
+                          onChange={(e) =>
+                            setStep2Form({ ...step2Form, km: e.target.value })
+                          }
+                          className={`${inputBase} font-bold text-indigo-700 bg-white`}
+                          placeholder="0"
+                          min="0"
+                          step="0.1"
+                          disabled={!canEditDelete}
+                        />
+                      </div>
+                    </div>
+                    {step2Form.start_km !== "" && step2Form.end_km !== "" && (() => {
+                      const sVal = parseFloat(step2Form.start_km);
+                      const eVal = parseFloat(step2Form.end_km);
+                      if (!isNaN(sVal) && !isNaN(eVal) && eVal >= sVal) {
+                        const total = eVal - sVal;
+                        const displayTotal = Number.isInteger(total) ? total : total.toFixed(1);
+                        return (
+                          <div className="mt-2.5 flex items-center gap-2">
+                            <span className="text-xs font-bold text-indigo-700 bg-indigo-100 border border-indigo-300 px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                              📍 Auto Calculated: <span className="font-extrabold text-indigo-900">{displayTotal} KM</span>
+                            </span>
+                            <span className="text-[11px] text-slate-500 font-medium">
+                              ({sVal} → {eVal})
+                            </span>
+                          </div>
+                        );
                       }
-                      className={inputBase}
-                      placeholder="0"
-                      min="0"
-                      step="0.1"
-                      disabled={!canEditDelete}
-                    />
-                  </FormField>
+                      return null;
+                    })()}
+                  </div>
                   <FormField label="Duration Limit">
                     <select
                       value={step2Form.duration || ""}

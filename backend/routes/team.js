@@ -27,7 +27,24 @@ router.post("/new", verifyToken, isAdmin, (req, res) => {
 
 /* GET ALL - Public (for dropdowns in forms) - No auth required */
 router.get("/", (req, res) => {
-  db.query("SELECT id, first_name, last_name, emp_email, job_title, emp_role, user_id, emp_id, mobile, mobile_number, emp_address FROM teammember ORDER BY first_name", (err, result) => {
+  let sql = "SELECT id, first_name, last_name, emp_email, job_title, emp_role, user_id, emp_id, mobile, mobile_number, emp_address FROM teammember";
+  const params = [];
+  const clauses = [];
+
+  if (req.query.excludeEngineers === "true" || req.query.role === "employee" || req.query.role === "staff") {
+    clauses.push("(LOWER(emp_role) NOT IN ('engineer', 'eng') AND LOWER(job_title) NOT LIKE '%engineer%')");
+  } else if (req.query.role) {
+    clauses.push("LOWER(emp_role) = LOWER(?)");
+    params.push(req.query.role);
+  }
+
+  if (clauses.length > 0) {
+    sql += " WHERE " + clauses.join(" AND ");
+  }
+
+  sql += " ORDER BY first_name";
+
+  db.query(sql, params, (err, result) => {
     if (err) return res.status(500).json(err);
     res.json(result);
   });
@@ -129,9 +146,12 @@ router.put("/:id", verifyToken, isAdmin, (req, res) => {
     (err) => {
       if (err) return res.status(500).json(err);
 
-      // If the teammember has a linked user, also update the users table first_name
-      if (first_name) {
-        db.query("UPDATE users SET first_name=? WHERE id=(SELECT user_id FROM teammember WHERE id=?)", [first_name, req.params.id], () => {});
+      if (first_name || emp_email || emp_id) {
+        db.query(
+          "UPDATE users SET first_name=?, last_name=?, email=?, emp_id=? WHERE id=(SELECT user_id FROM teammember WHERE id=?)",
+          [first_name, last_name || "", emp_email ? emp_email.toLowerCase() : "", emp_id || null, req.params.id],
+          () => {}
+        );
       }
 
       res.json({ success: true });

@@ -33,7 +33,24 @@ const checkDuplicateLead = (phone, email, excludeId, callback) => {
 // Helper to safely format date to YYYY-MM-DD
 const toDateOnly = (val) => {
   if (!val) return null;
-  return val.toString().slice(0, 10);
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return null;
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = val.toString().trim();
+  if (!s) return null;
+  const ymd = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/.exec(s);
+  if (ymd) {
+    return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
+  }
+  const dmy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(s);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  }
+  return s.slice(0, 10);
 };
 
 const resolveAssignedTo = (staffName, callback) => {
@@ -50,21 +67,20 @@ const resolveAssignedTo = (staffName, callback) => {
 };
 
 const isAuthorizedToEdit = (lead, user) => {
+  if (!lead || !user) return false;
   if (user.role === 'admin' || user.role === 'subadmin') return true;
-  if (lead.assigned_to && lead.assigned_to !== user.id) return false;
+
+  const userId = Number(user.id);
+  if (lead.created_by && Number(lead.created_by) === userId) return true;
+  if (lead.assigned_to && Number(lead.assigned_to) === userId) return true;
 
   const userName = (user.name || "").trim().toLowerCase();
-  if (lead.staff_name && lead.staff_name.trim().length > 0) {
-    if (userName.length > 0 && !lead.staff_name.toLowerCase().includes(userName)) {
-      return false;
-    }
+  const staffName = (lead.staff_name || "").trim().toLowerCase();
+  if (userName && staffName && (staffName.includes(userName) || userName.includes(staffName))) return true;
+
+  if (user.role === 'employee') {
+    if (!lead.assigned_to || Number(lead.assigned_to) === userId) return true;
   }
-
-  if (lead.created_by === user.id) return true;
-  if (lead.assigned_to === user.id) return true;
-
-  // JWT contains `name` (which is user's first_name)
-  if (lead.staff_name && lead.staff_name.trim().toLowerCase().includes(userName) && userName.length > 0) return true;
 
   return false;
 };
@@ -134,7 +150,7 @@ const syncClient = (data, userId, leadId, teammemberId) => {
 
 
 /* CREATE FIELD */
-router.post("/new", verifyToken, (req, res) => {
+router.post(["/", "/new"], verifyToken, (req, res) => {
   const data = { ...req.body, created_by: req.user.id };
 
   if (!data.customer_name || !data.visit_date) {
@@ -283,8 +299,8 @@ router.get("/", verifyToken, (req, res) => {
   const params = [];
 
   if (role === "employee") {
-    sql += " WHERE f.created_by = ?";
-    params.push(user_id);
+    sql += " WHERE (f.created_by = ? OR f.assigned_to = ? OR f.assigned_to IS NULL OR (f.staff_name IS NOT NULL AND f.staff_name != '' AND LOWER(f.staff_name) LIKE LOWER(?)))";
+    params.push(user_id, user_id, `%${user_name || ''}%`);
     sql += " ORDER BY f.id DESC";
     db.query(sql, params, (err, results) => {
       if (err) return res.status(500).json({ message: "Fetch failed" });

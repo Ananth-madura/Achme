@@ -11,18 +11,29 @@ export const getToday = () => {
 
 export const normalizeDate = (dateStr) => {
   if (!dateStr) return "";
+  if (dateStr instanceof Date) {
+    if (isNaN(dateStr.getTime())) return "";
+    return `${dateStr.getFullYear()}-${String(dateStr.getMonth() + 1).padStart(2, '0')}-${String(dateStr.getDate()).padStart(2, '0')}`;
+  }
   if (typeof dateStr === 'string') {
     const trimmed = dateStr.trim();
     if (!trimmed) return "";
-    // Exact YYYY-MM-DD (no time component)
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      return trimmed;
+
+    // If ISO string with T (e.g. "2026-08-10T18:30:00.000Z"), parse as Date to get local date
+    if (trimmed.includes("T")) {
+      const d = new Date(trimmed);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
     }
-    // Exact YYYY/MM/DD (no time component)
-    if (/^\d{4}\/\d{2}\/\d{2}$/.test(trimmed)) {
-      return trimmed.replace(/\//g, "-");
+
+    // Matches YYYY-MM-DD
+    const ymd = /^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/.exec(trimmed);
+    if (ymd) {
+      return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
     }
-    // Exact DD/MM/YYYY or DD-MM-YYYY
+
+    // Matches DD/MM/YYYY
     const dmy = /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.exec(trimmed);
     if (dmy) {
       return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
@@ -30,9 +41,7 @@ export const normalizeDate = (dateStr) => {
   }
   const d = parseDate(dateStr);
   if (isNaN(d.getTime())) return "";
-  return d.getFullYear() + '-' +
-         String(d.getMonth() + 1).padStart(2, '0') + '-' +
-         String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 export const isThisMonth = (dateStr) => {

@@ -187,10 +187,10 @@ echo  [4/%S%] Backend setup (npm install + database)...
 echo [%DATE% %TIME%] Step 4: Backend setup >> "%LOGFILE%"
 
 cd /d "%ROOT%\backend"
-if exist "%ROOT%\backend\node_modules" (
-  echo         node_modules folder already exists. Skipping npm install. [OK]
+if exist "%ROOT%\backend\node_modules\express" (
+  echo         backend node_modules already installed. Skipping npm install. [OK]
 ) else (
-  echo         node_modules folder not found. Running npm install...
+  echo         backend node_modules missing or incomplete. Running npm install...
   call npm install --legacy-peer-deps >>"%LOGFILE%" 2>&1
   if errorlevel 1 (
     echo         [FAIL] Backend npm install failed. Check %LOGFILE%
@@ -253,10 +253,10 @@ echo  [6/%S%] Frontend setup...
 echo [%DATE% %TIME%] Step 6: Frontend setup >> "%LOGFILE%"
 
 cd /d "%ROOT%\frontend"
-if exist "%ROOT%\frontend\node_modules" (
-  echo         node_modules folder already exists. Skipping npm install. [OK]
+if exist "%ROOT%\frontend\node_modules\react" (
+  echo         frontend node_modules already installed. Skipping npm install. [OK]
 ) else (
-  echo         node_modules folder not found. Running npm install...
+  echo         frontend node_modules missing or incomplete. Running npm install...
   call npm install --legacy-peer-deps >>"%LOGFILE%" 2>&1
   if errorlevel 1 (
     echo         [FAIL] Frontend npm install failed. Check %LOGFILE%
@@ -603,7 +603,7 @@ goto :monitor_loop
 :: ====================================================================
 :write_nginx_conf
 (
-echo worker_processes 1;
+echo worker_processes auto;
 echo.
 echo events {
 echo     worker_connections 1024;
@@ -616,6 +616,15 @@ echo     sendfile        on;
 echo     keepalive_timeout 65;
 echo     access_log  logs/achme_access.log;
 echo     error_log   logs/achme_error.log warn;
+echo.
+echo     # The React bundle is a few MB uncompressed - this is the single biggest
+echo     # win on first page load and on every large JSON list response.
+echo     gzip on;
+echo     gzip_comp_level 5;
+echo     gzip_min_length 1024;
+echo     gzip_proxied any;
+echo     gzip_vary on;
+echo     gzip_types text/plain text/css text/javascript application/javascript application/json application/xml image/svg+xml;
 echo.
 echo     upstream achme_backend {
 echo         server 127.0.0.1:%BACKEND_PORT%;
@@ -649,6 +658,19 @@ echo             proxy_connect_timeout  120s;
 echo             proxy_send_timeout     120s;
 echo             proxy_read_timeout     120s;
 echo             client_max_body_size   50M;
+echo         }
+echo.
+echo         # ^^~ so this beats the static-file regex location below - otherwise
+echo         # /uploads/photo.jpg matches that regex, misses the backend entirely
+echo         # and gets served index.html instead of the image.
+echo         location ^^~ /uploads/ {
+echo             proxy_pass http://achme_backend/uploads/;
+echo             proxy_http_version 1.1;
+echo             proxy_set_header Host              $host;
+echo             proxy_set_header X-Real-IP         $remote_addr;
+echo             proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+echo             expires 30d;
+echo             add_header Cache-Control "public";
 echo         }
 echo.
 echo         location /socket.io/ {

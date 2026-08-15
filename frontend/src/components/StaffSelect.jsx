@@ -23,20 +23,45 @@ const StaffSelect = ({
   className = "",
   valueField = "user_id",
   role: filterRole,
+  excludeEngineers = true,
   placeholder = "-- Select Staff --",
 }) => {
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let url = `${API}/api/teammember`;
-    if (filterRole) url += `?role=${encodeURIComponent(filterRole)}`;
+    const fetchStaff = () => {
+      let url = `${API}/api/teammember`;
+      const params = [];
+      if (filterRole) params.push(`role=${encodeURIComponent(filterRole)}`);
+      if (excludeEngineers) params.push(`excludeEngineers=true`);
+      if (params.length) url += `?${params.join("&")}`;
 
-    axios.get(url)
-      .then(res => setTeamMembers(res.data || []))
-      .catch(err => console.error("Failed to fetch team members:", err))
-      .finally(() => setLoading(false));
-  }, [filterRole]);
+      axios.get(url)
+        .then(res => {
+          let list = res.data || [];
+          if (excludeEngineers) {
+            list = list.filter(m => {
+              const role = (m.emp_role || "").toLowerCase();
+              const title = (m.job_title || "").toLowerCase();
+              return role !== "engineer" && role !== "eng" && !title.includes("engineer");
+            });
+          }
+          setTeamMembers(list);
+        })
+        .catch(err => console.error("Failed to fetch team members:", err))
+        .finally(() => setLoading(false));
+    };
+
+    fetchStaff();
+    const h = () => fetchStaff();
+    window.addEventListener("refresh-team", h);
+    window.addEventListener("refresh-dashboard", h);
+    return () => {
+      window.removeEventListener("refresh-team", h);
+      window.removeEventListener("refresh-dashboard", h);
+    };
+  }, [filterRole, excludeEngineers]);
 
   if (loading) {
     return (

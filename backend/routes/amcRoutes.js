@@ -100,6 +100,22 @@ router.get("/amc-alc/:contract_id", verifyToken, (req, res) => {
   });
 });
 
+/* GET ALL AMC LIST */
+router.get("/", verifyToken, (req, res) => {
+  const { id: user_id, role } = req.user;
+  let sql = "SELECT s.*, c.contract_title, c.client_company FROM amc_alc_services s JOIN contracts c ON s.contract_id = c.id";
+  const params = [];
+  if (role === "employee") {
+    sql += " WHERE (s.service_person_id = ? OR s.created_by = ? OR c.created_by = ?)";
+    params.push(user_id, user_id, user_id);
+  }
+  sql += " ORDER BY s.service_date DESC";
+  db.query(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
 /* GET ALL AMC/ALC SERVICES */
 router.get("/amc-alc", verifyToken, (req, res) => {
   const { service_type, status } = req.query;
