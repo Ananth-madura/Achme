@@ -76,17 +76,36 @@ const sendMissedAlert = (lead, count) => {
 // GET all reminders for a lead
 router.get("/reminders/:leadType/:leadId", verifyToken, (req, res) => {
   const { id: user_id, role } = req.user;
-  let sql = "SELECT * FROM lead_reminders WHERE lead_id=? AND lead_type=?";
-  const params = [req.params.leadId, req.params.leadType];
-  if (role === 'employee') {
-    sql += " AND employee_id = ?";
-    params.push(user_id);
+  const tableMap = { telecall: "telecalls", walkin: "walkins", field: "fields" };
+  const leadTable = tableMap[req.params.leadType];
+
+  const fetchReminders = () => {
+    let sql = "SELECT * FROM lead_reminders WHERE lead_id=? AND lead_type=?";
+    const params = [req.params.leadId, req.params.leadType];
+    sql += " ORDER BY reminder_date ASC, id DESC";
+    db.query(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    });
+  };
+
+  if (role === 'employee' && leadTable) {
+    db.query(`SELECT created_by, assigned_to FROM ${leadTable} WHERE id = ?`, [req.params.leadId], (err, rows) => {
+      if (err || rows.length === 0) return res.status(404).json({ message: "Not found" });
+      const lead = rows[0];
+      const isAuth = (
+        Number(lead.created_by) === Number(user_id) ||
+        Number(lead.assigned_to) === Number(user_id)
+      );
+      if (!isAuth) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      fetchReminders();
+    });
+    return;
   }
-  sql += " ORDER BY reminder_date ASC, id DESC";
-  db.query(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+
+  fetchReminders();
 });
 
 // POST add a reminder
@@ -202,17 +221,36 @@ router.get("/followups-summary/:leadType", verifyToken, (req, res) => {
 // GET all follow-ups for a lead
 router.get("/followups/:leadType/:leadId", verifyToken, (req, res) => {
   const { id: user_id, role } = req.user;
-  let sql = "SELECT * FROM lead_followups WHERE lead_id=? AND lead_type=?";
-  const params = [req.params.leadId, req.params.leadType];
-  if (role === 'employee') {
-    sql += " AND employee_id = ?";
-    params.push(user_id);
+  const tableMap = { telecall: "telecalls", walkin: "walkins", field: "fields" };
+  const leadTable = tableMap[req.params.leadType];
+
+  const fetchFollowups = () => {
+    let sql = "SELECT * FROM lead_followups WHERE lead_id=? AND lead_type=?";
+    const params = [req.params.leadId, req.params.leadType];
+    sql += " ORDER BY followup_date ASC, id DESC";
+    db.query(sql, params, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json(rows);
+    });
+  };
+
+  if (role === 'employee' && leadTable) {
+    db.query(`SELECT created_by, assigned_to FROM ${leadTable} WHERE id = ?`, [req.params.leadId], (err, rows) => {
+      if (err || rows.length === 0) return res.status(404).json({ message: "Not found" });
+      const lead = rows[0];
+      const isAuth = (
+        Number(lead.created_by) === Number(user_id) ||
+        Number(lead.assigned_to) === Number(user_id)
+      );
+      if (!isAuth) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      fetchFollowups();
+    });
+    return;
   }
-  sql += " ORDER BY followup_date ASC, id DESC";
-  db.query(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+
+  fetchFollowups();
 });
 
 // POST add a follow-up
@@ -267,7 +305,7 @@ router.get("/followups", verifyToken, (req, res) => {
       t.followup_date, t.followup_notes, t.staff_name
     FROM telecalls t
     WHERE (t.followup_required = 'Yes' OR t.followup_date IS NOT NULL) ${dateCondition}
-    ${role === 'employee' ? 'AND t.user_id = ?' : ''}
+    ${role === 'employee' ? 'AND (t.created_by = ? OR t.assigned_to = ?)' : ''}
     
     UNION ALL
     
@@ -276,7 +314,7 @@ router.get("/followups", verifyToken, (req, res) => {
       w.followup_date, w.followup_notes, w.staff_name
     FROM walkins w
     WHERE (w.followup_required = 'Yes' OR w.followup_date IS NOT NULL) ${dateConditionW}
-    ${role === 'employee' ? 'AND w.user_id = ?' : ''}
+    ${role === 'employee' ? 'AND (w.created_by = ? OR w.assigned_to = ?)' : ''}
     
     UNION ALL
     
@@ -285,22 +323,21 @@ router.get("/followups", verifyToken, (req, res) => {
       f.followup_date, f.followup_notes, f.staff_name
     FROM fields f
     WHERE (f.followup_required = 'Yes' OR f.followup_date IS NOT NULL) ${dateConditionF}
-    ${role === 'employee' ? 'AND f.user_id = ?' : ''}
+    ${role === 'employee' ? 'AND (f.created_by = ? OR f.assigned_to = ?)' : ''}
 
     ORDER BY followup_date ASC
   `;
 
   let params = [];
-  if (type === "Todays" || type === "Due" || type === "Overdue") {
-    params.push(today);
-    if (role === 'employee') params.push(user_id);
-    params.push(today);
-    if (role === 'employee') params.push(user_id);
-    params.push(today);
-    if (role === 'employee') params.push(user_id);
-  } else {
-    if (role === 'employee') params.push(user_id, user_id, user_id);
-  }
+  // For telecalls
+  if (type === "Todays" || type === "Due" || type === "Overdue") params.push(today);
+  if (role === 'employee') params.push(user_id, user_id);
+  // For walkins
+  if (type === "Todays" || type === "Due" || type === "Overdue") params.push(today);
+  if (role === 'employee') params.push(user_id, user_id);
+  // For fields
+  if (type === "Todays" || type === "Due" || type === "Overdue") params.push(today);
+  if (role === 'employee') params.push(user_id, user_id);
 
   db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -554,9 +591,7 @@ router.get("/activity/:leadType/:leadId", verifyToken, (req, res) => {
         const lead = rows[0];
         const isAuth = (
           Number(lead.created_by) === Number(user_id) ||
-          Number(lead.assigned_to) === Number(user_id) ||
-          !lead.assigned_to ||
-          (user_name && lead.staff_name && lead.staff_name.toLowerCase().includes(user_name.toLowerCase()))
+          Number(lead.assigned_to) === Number(user_id)
         );
         if (!isAuth) {
           return res.status(403).json({ message: "Access denied" });

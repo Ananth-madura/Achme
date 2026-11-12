@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getToday } from "../utils/leadutil";
 import axios from "axios";
-import { X, Search, Plus, Eye, ChevronLeft, ChevronRight, Edit, Trash2, Mail } from "lucide-react";
+import { X, Search, Plus, Eye, ChevronLeft, ChevronRight, Edit, Trash2, Mail, Image as ImageIcon } from "lucide-react";
 import ClientSearchDropdown from "../components/ClientSearchDropdown";
 import "../Styles/tailwind.css";
 
@@ -51,6 +51,18 @@ function Products() {
   const getAuthConfig = () => {
     const token = localStorage.getItem("token");
     return { headers: { Authorization: `Bearer ${token}` } };
+  };
+
+  // 🔄 TOGGLE STATUS (Pending ↔ Closed)
+  const toggleStatus = async (id, currentStatus) => {
+    const newStatus = currentStatus === "Closed" ? "Pending" : "Closed";
+    try {
+      await axios.patch(`${API}/services/${id}/status`, { status: newStatus }, getAuthConfig());
+      setServices(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update status");
+    }
   };
 
   // 🔥 FETCH SERVICES
@@ -248,17 +260,40 @@ function Products() {
 
     // If it's already a full http/https URL
     if (str.startsWith("http://") || str.startsWith("https://")) {
-      const match = str.match(/\/uploads\/(.+)$/i);
-      if (match) return `${BASE_API}/uploads/${match[1]}`;
+      const match = str.match(/\/(?:api\/)?uploads\/(.+)$/i);
+      if (match) {
+        const file = match[1];
+        return BASE_API ? `${BASE_API}/uploads/${file}` : `/uploads/${file}`;
+      }
       return str;
     }
 
-    // Strip leading slashes/backslashes and "uploads/" prefix
+    // Strip leading slashes/backslashes and "uploads/" or "api/uploads/" prefix
     let clean = str.replace(/^[/\\]+/, "");
-    if (/^uploads[/\\]/i.test(clean)) {
-      clean = clean.replace(/^uploads[/\\]+/i, "");
+    if (/^(api[/\\])?uploads[/\\]/i.test(clean)) {
+      clean = clean.replace(/^(api[/\\])?uploads[/\\]+/i, "");
     }
-    return `${BASE_API}/uploads/${clean}`;
+    return BASE_API ? `${BASE_API}/uploads/${clean}` : `/uploads/${clean}`;
+  };
+
+  const handleImageError = (e) => {
+    const currentSrc = e.target.src || "";
+    // Step 1: If /uploads/ failed (e.g. strict nginx config), fallback to /api/uploads/ which is always proxied via /api/
+    if (currentSrc && currentSrc.includes("/uploads/") && !currentSrc.includes("/api/uploads/")) {
+      e.target.src = currentSrc.replace("/uploads/", "/api/uploads/");
+      return;
+    }
+    // Step 2: If port 82 failed, try relative /uploads/ or direct backend fallback
+    if (currentSrc && currentSrc.includes(":82/")) {
+      e.target.src = currentSrc.replace(":82/", ":5000/");
+      return;
+    }
+    // Final fallback: hide image and show fallback icon
+    e.target.onerror = null;
+    e.target.style.display = "none";
+    if (e.target.nextElementSibling) {
+      e.target.nextElementSibling.style.display = "flex";
+    }
   };
 
   const openCarousel = (imgs) => {
@@ -298,8 +333,8 @@ function Products() {
   return (
     <div className="w-full h-[111vh] p-6">
       <div className="mb-3">
-        <h1 className="text-2xl font-bold text-[#1694CE]">Products</h1>
-        <a className="text-sm text-gray-500" href="/dashboard"> Dashboard &gt; Services &gt; Products </a>
+        <h1 className="text-2xl font-bold text-[#1694CE]">In-House</h1>
+        <a className="text-sm text-gray-500" href="/dashboard"> Dashboard &gt; Services &gt; In-House </a>
       </div>
 
       {/* ----------------- FILTER & SEARCH BAR ----------------- */}
@@ -336,6 +371,7 @@ function Products() {
               <th className="p-4 font-semibold border-b">Warranty</th>
               <th className="p-4 font-semibold border-b">AMC</th>
               <th className="p-4 font-semibold border-b">Date</th>
+              <th className="p-4 font-semibold border-b text-center">Status</th>
               <th className="p-4 font-semibold border-b text-center">Images</th>
               <th className="p-4 font-semibold border-b text-center">Actions</th>
             </tr>
@@ -354,6 +390,26 @@ function Products() {
                 </td>
                 <td className="p-4">{s.date?.split("T")[0]}</td>
                 <td className="p-4 text-center">
+                  <button
+                    onClick={() => toggleStatus(s.id, s.status || "Pending")}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+                      (s.status || "Pending") === "Closed" ? "bg-green-500" : "bg-yellow-400"
+                    }`}
+                    title={`Click to mark as ${(s.status || "Pending") === "Closed" ? "Pending" : "Closed"}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                        (s.status || "Pending") === "Closed" ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                  <span className={`ml-2 text-xs font-semibold ${
+                    (s.status || "Pending") === "Closed" ? "text-green-600" : "text-yellow-600"
+                  }`}>
+                    {(s.status || "Pending") === "Closed" ? "Closed" : "Pending"}
+                  </span>
+                </td>
+                <td className="p-4 text-center">
                   {(() => {
                     const imgList = parseImageArray(s.images);
                     if (imgList.length === 0) {
@@ -371,11 +427,11 @@ function Products() {
                             src={firstImgUrl} 
                             alt={s.material || "Product"} 
                             className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.style.display = "none";
-                            }}
+                            onError={handleImageError}
                           />
+                          <div className="hidden w-full h-full items-center justify-center text-gray-400 bg-gray-50">
+                            <ImageIcon size={16} />
+                          </div>
                           {imgList.length > 1 && (
                             <span className="absolute bottom-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-1 rounded-tl">
                               +{imgList.length - 1}
@@ -604,9 +660,7 @@ function Products() {
                   src={getImageUrl(currentImages[currentIndex])}
                   className="max-w-full max-h-full object-contain shadow-2xl rounded-lg"
                   alt={`Product img ${currentIndex + 1}`}
-                  onError={(e) => {
-                    console.error("Image load error:", e.target.src);
-                  }}
+                  onError={handleImageError}
                 />
               </div>
 

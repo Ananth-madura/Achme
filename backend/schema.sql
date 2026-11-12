@@ -96,6 +96,11 @@ CREATE TABLE IF NOT EXISTS `call_reports` (
   `travel_reach_time` time          DEFAULT NULL,
   `travel_duration`   int           DEFAULT NULL,
 
+  -- travel route (Form 2)
+  `start_point`       varchar(255)  DEFAULT NULL,
+  `destination`       varchar(255)  DEFAULT NULL,
+  `via_points`        text          DEFAULT NULL,
+
   -- travel & expenses (Form 1 + Form 2)
   `km`                decimal(25,2) DEFAULT NULL,
   `petrol_charges`    decimal(25,2) DEFAULT 0.00,

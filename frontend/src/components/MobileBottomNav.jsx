@@ -13,7 +13,7 @@ const defaultNavItems = [
 
 const serviceEngineerNavItems = [
   { icon: Phone, label: "Call Report", path: "/dashboard/call-report" },
-  { icon: Package, label: "Products", path: "/dashboard/products" },
+  { icon: Package, label: "In-House", path: "/dashboard/products" },
   { icon: Grid3X3, label: "More", path: null, isMenu: true },
 ];
 

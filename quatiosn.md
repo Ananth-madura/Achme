@@ -1,475 +1,514 @@
-# ACHME CRM: Quotation Module Complete Engineering Specification
+# ACHME CRM — Quotation Module: Complete Technical & Business Logic Specification
 
-This document contains the complete technical specifications, database schema, mathematical business logic, backend REST API contracts, frontend page state, and document template rendering rules for the **Quotation Module** of the ACHME CRM platform. 
-
-Provide this specification to your AI coding assistant to generate a fully working, production-grade implementation of the module.
+This document provides a comprehensive, deep-dive specification of the **Quotation System** in ACHME CRM. It details how the module functions end-to-end, all data structures, user input requirements, calculation engines, version control logic, automated target synchronization, and document template rendering rules.
 
 ---
 
-## 1. System Overview & Architecture
-The Quotation Module manages B2B customer proposals and sales quotes. It operates on a Node.js/Express backend, a MySQL database, and a React frontend. The module supports:
-1. **Dynamic Client Selection & Sync**: Auto-filling billing information by fetching from an existing Client registry, with automatic synchronization between `customers` and `clients` tables.
-2. **Multi-Mode GST Calculations**: Standardized GST (Exclusive, Inclusive, and Exempt) with automatic geographical routing (CGST/SGST vs. IGST) based on the supplier branch and customer state.
-3. **Immutability & Version Control**: Editing a quotation does *not* overwrite database history. Instead, it marks the current record as inactive, increments the version number, and inserts a new latest revision connected to the parent quote.
-4. **Interactive Proposals & Emailing**: Real-time PDF-friendly preview template rendering, SMTP-based email dispatching to clients, and customizable terms/conditions.
+## Table of Contents
+1. [System Architecture & Core Workflow](#1-system-architecture--core-workflow)
+2. [Database Schema & Data Model](#2-database-schema--data-model)
+3. [Field Inventory & User Input Requirements](#3-field-inventory--user-input-requirements)
+   - [3.1 Header & Supplier Information (From Address)](#31-header--supplier-information-from-address)
+   - [3.2 Customer & Billing Information (Billed To)](#32-customer--billing-information-billed-to)
+   - [3.3 Quotation Metadata & Document Control](#33-quotation-metadata--document-control)
+   - [3.4 Line Items (Quote Items)](#34-line-items-quote-items)
+   - [3.5 Account Executive Details](#35-account-executive-details)
+   - [3.6 Terms & Conditions Configuration](#36-terms--conditions-configuration)
+   - [3.7 Bank Details Configuration](#37-bank-details-configuration)
+   - [3.8 Attached Media / Image Uploads](#38-attached-media--image-uploads)
+4. [Mathematical & Business Calculation Engine](#4-mathematical--business-calculation-engine)
+   - [4.1 Geographic GST Routing (Intra-state vs Inter-state)](#41-geographic-gst-routing-intra-state-vs-inter-state)
+   - [4.2 Multi-Mode GST Calculations (Exclusive, Inclusive, Exempt, Tax Extra)](#42-multi-mode-gst-calculations-exclusive-inclusive-exempt-tax-extra)
+   - [4.3 Multi-Tax Rate Aggregation & Grouping](#43-multi-tax-rate-aggregation--grouping)
+   - [4.4 Currency to Indian Rupee Words Conversion](#44-currency-to-indian-rupee-words-conversion)
+5. [Immutable Version Control & Revision History Logic](#5-immutable-version-control--revision-history-logic)
+6. [Quotation Lifecycle & Automated Target Synchronization](#6-quotation-lifecycle--automated-target-synchronization)
+7. [Document Rendering & PDF Generation Logic](#7-document-rendering--pdf-generation-logic)
+8. [Security, Authentication & Role-Based Access Control (RBAC)](#8-security-authentication--role-based-access-control-rbac)
+9. [REST API Contracts & Endpoints](#9-rest-api-contracts--endpoints)
+
+---
+
+## 1. System Architecture & Core Workflow
+
+The Quotation Module handles the creation, mathematical evaluation, versioning, PDF generation, email dispatch, and sales performance tracking of B2B sales proposals.
 
 ```mermaid
-graph TD
-    A[React Front-End UI] -->|REST APIs| B(Express API Controller)
-    B -->|Database Operations| C[(MySQL Database)]
+flowchart TD
+    A[Sales Rep / Admin UI] -->|Fill Form / Select Client| B(Frontend State Engine)
+    B -->|Real-time Keypress Calculations| C[Tax & Totals Calculator]
+    B -->|Submit POST/PUT| D[Express API Controller]
     
-    subgraph Calculation & Logic Engine
-        D[State Check: Supplier vs Client]
-        E[GST Mode Selector: Exclusive / Inclusive / Exempt]
-        F[Revision Engine: parent_id, version, is_latest]
+    subgraph Backend Transaction
+        D --> E[Sync/Upsert 'clients' & 'customers']
+        D --> F{Is Revision / Edit?}
+        F -->|Yes| G[Mark Prior Revisions is_latest = 0]
+        F -->|Yes| H[Insert New Version row with root parent_id]
+        F -->|No| I[Insert Parent Quotation row version = 1]
+        G --> J[Batch Insert quotation_items]
+        H --> J
+        I --> J
+        J --> K{Status == 'Billed'?}
+        K -->|Yes| L[Sync Task Targets & Achievements]
+        K -->|No| M[Commit Transaction]
+        L --> M
     end
     
-    B -.-> D
-    B -.-> E
-    B -.-> F
+    M --> N[(MySQL Database)]
+    M --> O[WebSocket Notification to Admins]
+    D --> P[Puppeteer Headless PDF Engine]
+    P --> Q[Download PDF / SMTP Dispatch via Nodemailer]
+```
+
+### Core Workflow Steps:
+1. **Client Identification**: User either enters raw customer details or selects an existing client via `ClientSearchDropdown`. Selecting a client auto-populates billing addresses, state, GSTIN, and company phone/email.
+2. **Itemized Quote Formulation**: User enters line items with descriptions, model names, quantities, unit prices, individual tax percentages, and flat discounts.
+3. **Configuration of Commercial Terms**: User selects the supplying branch (Coimbatore, Bangalore, Chennai), bank account, GST mode, project completion timeline, payment terms, and warranty.
+4. **Instant Calculation**: The client-side engine computes line subtotals, tax splits (CGST/SGST vs IGST based on supplier vs client state), overall discount, and grand totals on every keystroke.
+5. **Persistence & Versioning**: Upon saving, a database transaction creates/updates the customer records and inserts the quotation. If editing an existing quote, a new version is created while preserving complete audit history.
+6. **Performance / Target Sync**: When a quote is moved to `Billed` status, the system automatically credits the sales executive's monthly performance target in the CRM target engine.
+7. **Document Generation & Dispatch**: Generates a standardized, printable A4 PDF matching corporate identity, with options to download directly or email to the client using logged-in user SMTP credentials.
+
+---
+
+## 2. Database Schema & Data Model
+
+The Quotation module interacts with 5 core tables and 4 auxiliary target/notification tables:
+
+```mermaid
+erDiagram
+    customers ||--o{ quotations : "places"
+    quotations ||--|{ quotation_items : "contains"
+    pi_from_addresses ||--o{ quotations : "originates from"
+    users ||--o{ quotations : "created by"
+    users ||--o{ task_targets : "has target"
+    task_targets ||--o{ task_achievements : "accumulates"
+    task_targets ||--o{ task_updates : "logs"
+
+    customers {
+        int id PK
+        string customer_name
+        string mobile_number
+        string email
+        string gst_number
+        string location_city
+        timestamp created_at
+    }
+
+    quotations {
+        int id PK
+        int customer_id FK
+        date quotation_date
+        decimal subtotal
+        decimal total_discount
+        decimal total_tax
+        decimal total_cgst
+        decimal total_sgst
+        decimal total_igst
+        decimal grand_total
+        string reference_no
+        int parent_id
+        int version
+        tinyint is_latest
+        string status
+        string supplier_branch
+        int from_address_id FK
+        text from_address_custom
+        string client_company
+        text client_address1
+        text client_address2
+        string client_city
+        string client_state
+        string client_pincode
+        string client_country
+        string gst_mode
+        string exec_name
+        string exec_phone
+        string exec_email
+        longtext terms_general
+        longtext terms_tax
+        longtext terms_project_period
+        longtext terms_validity
+        longtext terms_separate_orders
+        longtext terms_payment
+        longtext terms_payment_custom
+        longtext terms_warranty
+        longtext custom_terms
+        string bank_details_id
+        string bank_company
+        string bank_name
+        string bank_account
+        string bank_ifsc
+        string bank_branch
+        int created_by FK
+        timestamp created_at
+    }
+
+    quotation_items {
+        int id PK
+        int quotation_id FK
+        int product_number
+        string description
+        string brand_model
+        string hsn_sac
+        string uom
+        decimal price
+        int quantity
+        decimal tax
+        decimal discount
+        decimal subtotal
+        timestamp created_at
+    }
 ```
 
 ---
 
-## 2. Database Schema DDL
-The module uses five interconnected tables. Execute the following DDL script to initialize the database structure.
+## 3. Field Inventory & User Input Requirements
 
-```sql
--- 1. Customers Table (Stores customer profile information for quotations)
-CREATE TABLE IF NOT EXISTS `customers` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `customer_name` VARCHAR(100) NOT NULL,
-  `mobile_number` VARCHAR(20) DEFAULT NULL,
-  `email` VARCHAR(100) DEFAULT NULL,
-  `location_city` VARCHAR(100) DEFAULT NULL,
-  `gst_number` VARCHAR(50) DEFAULT NULL,
-  `created_by` INT DEFAULT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+### 3.1 Header & Supplier Information (From Address)
+Controls the origin company entity and legal GST details rendered at the top left of the quote.
 
--- 2. Clients Table (Shared client directory for auto-complete lookup and sync)
-CREATE TABLE IF NOT EXISTS `clients` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `name` VARCHAR(150) DEFAULT NULL,
-  `company_name` VARCHAR(150) DEFAULT NULL,
-  `email` VARCHAR(150) DEFAULT NULL,
-  `phone` VARCHAR(20) DEFAULT NULL,
-  `address` TEXT DEFAULT NULL,
-  `state` VARCHAR(100) DEFAULT NULL,
-  `pincode` VARCHAR(20) DEFAULT NULL,
-  `gst_number` VARCHAR(20) DEFAULT NULL,
-  `created_by` INT DEFAULT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 3. Quotation Branches/Sender Addresses Table
-CREATE TABLE IF NOT EXISTS `pi_from_addresses` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `label` VARCHAR(100) NOT NULL,
-  `address` TEXT NOT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 4. Quotations Metadata Table (Parent)
-CREATE TABLE IF NOT EXISTS `quotations` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `customer_id` INT NOT NULL,
-  `quotation_date` DATE NOT NULL,
-  `subtotal` DECIMAL(10,2) DEFAULT '0.00',
-  `total_tax` DECIMAL(10,2) DEFAULT '0.00',
-  `total_cgst` DECIMAL(10,2) DEFAULT '0.00',
-  `total_sgst` DECIMAL(10,2) DEFAULT '0.00',
-  `total_igst` DECIMAL(10,2) DEFAULT '0.00',
-  `total_discount` DECIMAL(10,2) DEFAULT '0.00',
-  `grand_total` DECIMAL(10,2) DEFAULT '0.00',
-  `reference_no` VARCHAR(50) DEFAULT NULL,
-  `created_by` INT DEFAULT NULL,
-  
-  -- Versioning fields
-  `parent_id` INT DEFAULT NULL,
-  `version` INT DEFAULT '1',
-  `is_latest` TINYINT(1) DEFAULT '1',
-  `status` VARCHAR(50) DEFAULT 'Pending', -- Send, Pending, Close, Billed, Cancel
-  
-  -- Branch & Sender info
-  `supplier_branch` VARCHAR(100) DEFAULT 'Coimbatore',
-  `from_address_id` INT DEFAULT NULL,
-  `from_address_custom` TEXT DEFAULT NULL,
-  
-  -- Client Billing metadata
-  `client_company` VARCHAR(150) DEFAULT NULL,
-  `client_address1` TEXT DEFAULT NULL,
-  `client_address2` TEXT DEFAULT NULL,
-  `client_city` VARCHAR(100) DEFAULT NULL,
-  `client_state` VARCHAR(100) DEFAULT NULL,
-  `client_pincode` VARCHAR(20) DEFAULT NULL,
-  `client_country` VARCHAR(50) DEFAULT 'India',
-  
-  -- Tax details
-  `tax_type` VARCHAR(20) DEFAULT 'GST18',
-  `custom_tax` VARCHAR(20) DEFAULT NULL,
-  `gst_mode` VARCHAR(20) DEFAULT 'Exclusive', -- Exclusive, Inclusive, Exempt
-  
-  -- Account Executive info
-  `exec_name` VARCHAR(100) DEFAULT NULL,
-  `exec_phone` VARCHAR(20) DEFAULT NULL,
-  `exec_email` VARCHAR(150) DEFAULT NULL,
-  
-  -- T&C Toggle Configurations
-  `terms_general` TINYINT(1) DEFAULT '0',
-  `terms_tax` TINYINT(1) DEFAULT '0',
-  `terms_project_period` VARCHAR(100) DEFAULT NULL,
-  `terms_validity` VARCHAR(50) DEFAULT NULL,
-  `terms_separate_orders` TEXT DEFAULT NULL, -- JSON string: {material: bool, installation: bool, usd: bool, boq: bool}
-  `terms_payment` VARCHAR(100) DEFAULT NULL,
-  `terms_payment_custom` VARCHAR(100) DEFAULT NULL,
-  `terms_warranty` VARCHAR(100) DEFAULT NULL,
-  `custom_terms` TEXT DEFAULT NULL,
-  
-  -- Bank Details
-  `bank_details_id` VARCHAR(50) DEFAULT NULL,
-  `bank_company` VARCHAR(150) DEFAULT NULL,
-  `bank_name` VARCHAR(100) DEFAULT NULL,
-  `bank_account` VARCHAR(50) DEFAULT NULL,
-  `bank_ifsc` VARCHAR(50) DEFAULT NULL,
-  `bank_branch` VARCHAR(100) DEFAULT NULL,
-  
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `customer_id` (`customer_id`),
-  CONSTRAINT `quotations_ibfk_1` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 5. Quotation Item Details Table (Child)
-CREATE TABLE IF NOT EXISTS `quotation_items` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `quotation_id` INT NOT NULL,
-  `product_number` INT NOT NULL, -- Sorting sequence order
-  `description` VARCHAR(255) NOT NULL,
-  `brand_model` VARCHAR(150) DEFAULT NULL,
-  `hsn_sac` VARCHAR(20) DEFAULT NULL,
-  `uom` VARCHAR(20) DEFAULT 'Nos', -- Nos, Units, Pieces, Boxes, Sets, Meters, Kg, Liters
-  `price` DECIMAL(10,2) NOT NULL,
-  `quantity` INT NOT NULL,
-  `tax` DECIMAL(10,2) DEFAULT '0.00', -- Individual item tax percentage (e.g. 18.00)
-  `discount` DECIMAL(10,2) DEFAULT '0.00', -- Flat discount amount on this item
-  `subtotal` DECIMAL(10,2) NOT NULL, -- Final subtotal of this item after discount & tax
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `quotation_id` (`quotation_id`),
-  CONSTRAINT `quotation_items_ibfk_1` FOREIGN KEY (`quotation_id`) REFERENCES `quotations` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-```
+| Field Name | Type | UI Control | Required? | Source / Logic |
+| :--- | :--- | :--- | :---: | :--- |
+| `supplier_branch` | `VARCHAR(100)` | Dropdown | **Yes** | Options: `Coimbatore`, `Bangalore`, `Chennai`. Drives supplier state resolution and branch address defaults. |
+| `from_address_custom` | `TEXT` | Auto-filled / Text | Optional | Contains resolved multi-line address, phone, email, and supplier GSTIN. |
+| `from_address_id` | `INT` | Dropdown | Optional | ID from `pi_from_addresses` table if a custom warehouse/office address is selected. |
+| `from_gstin` | `VARCHAR(20)` | Derived | Auto | Coimbatore: `33AAHFA7876M1ZX`<br>Bangalore: `29AAHFA7876M1ZM`<br>Chennai: `33AAHFA7876M1ZX` |
 
 ---
 
-## 3. Mathematical Business Logic
+### 3.2 Customer & Billing Information (Billed To)
+Controls customer identification, cross-module CRM sync, and geographical tax routing.
 
-### 3.1 Geographic GST Routing (CGST/SGST vs. IGST)
-The application determines whether to charge intra-state tax (CGST + SGST) or inter-state tax (IGST) by comparing:
-- The state of the **Supplier Branch** (e.g., Coimbatore -> Tamil Nadu, Bangalore -> Karnataka).
-- The state of the **Client Address** (`client_state`).
-
-1. Let `Supplier State` be resolved from the branch mapping:
-   - Coimbatore Branch $\rightarrow$ "Tamil Nadu"
-   - Chennai Branch $\rightarrow$ "Tamil Nadu"
-   - Bangalore Branch $\rightarrow$ "Karnataka"
-2. Let `Client State` be `client_state` (normalized to lowercase, trimmed).
-3. **Intra-State (Same State)**: If `Supplier State` == `Client State`:
-   - CGST Rate = $\text{Item Tax Rate} / 2$
-   - SGST Rate = $\text{Item Tax Rate} / 2$
-   - IGST Rate = $0$
-4. **Inter-State (Different State)**: If `Supplier State` != `Client State`:
-   - CGST Rate = $0$
-   - SGST Rate = $0$
-   - IGST Rate = $\text{Item Tax Rate}$
+| Field Name | Type | UI Control | Required? | Validation & Logic |
+| :--- | :--- | :--- | :---: | :--- |
+| `salutation` | `VARCHAR(10)` | Dropdown | Optional | Options: `Mr.`, `Mrs.`, `M/S.`. Prefixed to customer name. |
+| `customer_name` | `VARCHAR(150)` | Auto-complete Input | **REQUIRED** | Customer/Contact person name. Supports lookup from existing clients. |
+| `mobile_number` | `VARCHAR(20)` | Numeric Input | **REQUIRED** | Max 13 digits (numeric regex `^\d{0,13}$`). Used as unique key to lookup/upsert into `clients` directory. |
+| `email` | `VARCHAR(150)` | Email Input | Optional | Valid email format. Default recipient when sending quotation via SMTP. |
+| `gst_number` | `VARCHAR(20)` | Text (Uppercase) | Optional | Format: `33AAAAA0000A1Z5`. **Smart Logic**: Entering the first 2 digits automatically parses the State Code map and auto-selects `client_state`. |
+| `client_company` | `VARCHAR(150)` | Auto-complete / Input | Optional | Registered company name. If present, rendered in bold as primary billing recipient in the PDF. |
+| `client_address1` | `TEXT` | Text Input | Optional | Primary street address / building details. |
+| `client_address2` | `TEXT` | Text Input | Optional | Area / landmark details. |
+| `client_city` | `VARCHAR(100)` | Text Input | Optional | City / District. |
+| `client_state` | `VARCHAR(100)` | Dropdown | Optional | 36 Indian States/UTs. **Crucial**: Determines intra-state vs inter-state GST split. |
+| `client_pincode` | `VARCHAR(10)` | Numeric Input | Optional | Max 6 digits (`^\d{0,6}$`). |
+| `client_country` | `VARCHAR(50)` | Readonly Text | Optional | Defaults to `"India"`. |
 
 ---
 
-### 3.2 GST Calculation Modes
+### 3.3 Quotation Metadata & Document Control
 
-For each line item $i$, let:
+| Field Name | Type | UI Control | Required? | Source / Logic |
+| :--- | :--- | :--- | :---: | :--- |
+| `quotation_date` | `DATE` | Datepicker | **REQUIRED** | Defaults to today's date (`YYYY-MM-DD`). |
+| `reference_no` | `VARCHAR(50)` | System Generated | Auto | Unique identifier format: `QT-YYYYMMDD-XXXX` (e.g., `QT-20260613-4821`). |
+| `docNumber` (Display) | Display Only | Calculated | Auto | Rendered in PDF/UI as `QT-YYYY-XXX` (e.g., `QT-2026-004`). |
+| `version` | `INT` | Integer Badge | Auto | Starts at `1`. Increments on every revision (`version + 1`). |
+| `is_latest` | `TINYINT(1)` | Flag | Auto | `1` for the active version; `0` for archived revisions. |
+| `parent_id` | `INT` | FK Reference | Auto | `NULL` for original quote; points to the root quotation ID for all subsequent revisions. |
+| `status` | `VARCHAR(50)` | Dropdown / Badge | Optional | Default: `Pending`. Options: `Send`, `Pending`, `Close`, `Billed`, `Cancel`. |
+
+---
+
+### 3.4 Line Items (Quote Items)
+Each quotation contains one or more line items stored in `quotation_items`.
+
+| Field Name | Type | UI Control | Required? | Validation & Display Rules |
+| :--- | :--- | :--- | :---: | :--- |
+| `product_number` | `INT` | Sequenced index | Auto | Line sequence order (1, 2, 3...). |
+| `description` | `TEXT` | Textarea / Input | **REQUIRED** | **Special Formatting Rule**: If text contains a comma (`,`), the text *before* the first comma is styled as **Bold Header** (`font-weight: 700`, color `#1e293b`), and text *after* the comma is rendered as subtext/metadata (`color: #64748b`, `font-size: 10.5px`). |
+| `brand_model` | `VARCHAR(150)` | Text Input | Optional | Brand or model (e.g. *Hikvision 4MP*, *Dell PowerEdge*). Column is auto-hidden in PDF if all items leave it empty. |
+| `hsn_sac` | `VARCHAR(20)` | Text Input | Optional | HSN/SAC code (e.g. `8525`, `9987`). Column is auto-hidden in PDF if all items leave it empty. |
+| `uom` | `VARCHAR(20)` | Dropdown / Custom | Optional | Options: `Nos`, `Units`, `Pieces`, `Boxes`, `Sets`, `Meters`, `Kg`, `Liters`, or custom string. Defaults to `Nos`. |
+| `price` | `DECIMAL(10,2)` | Numeric Input | **REQUIRED** | Unit price. Must be $\ge 0$. |
+| `quantity` | `INT` | Numeric Input | **REQUIRED** | Quantity. Must be $\ge 1$. |
+| `tax` | `DECIMAL(10,2)` | Numeric Input | Optional | GST rate percentage for this specific item (e.g., `18.00`, `28.00`, `5.00`). Defaults to `18`. |
+| `discount` | `DECIMAL(10,2)` | Numeric Input | Optional | Flat deduction amount (₹) applied directly to this line item. |
+| `subtotal` | `DECIMAL(10,2)` | Calculated | Auto | Final calculated total value of this line item. |
+
+---
+
+### 3.5 Account Executive Details
+Captures the sales representative handling the deal.
+
+| Field Name | Type | UI Control | Logic & Default Value |
+| :--- | :--- | :--- | :--- |
+| `exec_name` | `VARCHAR(100)` | Text Input | Auto-populated from logged-in user profile (`first_name + last_name`). Editable. |
+| `exec_phone` | `VARCHAR(20)` | Text Input | Auto-populated from logged-in user's mobile number. Editable. |
+| `exec_email` | `VARCHAR(150)` | Email Input | Auto-populated from logged-in user's email. Editable. |
+
+---
+
+### 3.6 Terms & Conditions Configuration
+Enables toggling and customizing standard commercial, legal, and operational terms.
+
+| Field Name | Type | UI Control | Options / Logic |
+| :--- | :--- | :--- | :--- |
+| `terms_general` | `BOOLEAN / LONGTEXT` | Checkbox | Standard T&C clause toggle. |
+| `custom_terms` | `LONGTEXT` | Text Input | Free-form additional notes or conditions entered by the sales representative. |
+| `gst_mode` | `VARCHAR(20)` | Radio Selector | Options: `Exclusive`, `Inclusive`, `Exempt`, `Tax Extra`. Drives the tax calculation logic and printed tax disclaimer term. |
+| `hide_gst_percentage` | `BOOLEAN` | Checkbox (in `terms_separate_orders`) | When checked, hides the specific rate percentage (e.g., displays `CGST` instead of `CGST 9%`). |
+| `terms_project_period`| `LONGTEXT` | Text Input | Preset: `"30-60 days from Purchase Order date"`. Editable. |
+| `terms_validity` | `LONGTEXT` | Radio Selector | Options: `2 days`, `5 days`, `10 days`, `15 days`, `30 days`. Prints quote validity. |
+| `terms_payment` | `LONGTEXT` | Radio Selector | Options: `100% Advance`, `Payment Against Delivery`, `15 Days`, `30 Days`, `45 Days`, `Custom`. |
+| `terms_payment_custom`| `LONGTEXT` | Numeric / Text Input | Used when `terms_payment === 'Custom'` to specify exact custom days or milestones. |
+| `terms_warranty` | `LONGTEXT` | Radio Selector | Options: `No Warranty`, `Testing Warranty`, `1 Month`, `3 Months`, `6 Months`, `12 Months`, `24 Months`, `36 Months`, `OEM Warranty`, `Supplier Warranty`, `OEM Hardware Warranty`, `No Software Warranty`. |
+| `terms_separate_orders`| `LONGTEXT (JSON)` | Multi-checkbox | Stores boolean flags: `{ material: bool, installation: bool, usd: bool, boq: bool, hide_gst_percentage: bool, attached_images: [] }`. |
+
+---
+
+### 3.7 Bank Details Configuration
+Specifies the supplier banking credentials printed on the quotation for wire transfer/NEFT/RTGS.
+
+| Field Name | Type | UI Control | Options / Logic |
+| :--- | :--- | :--- | :--- |
+| `bank_details_id` | `VARCHAR(50)` | Dropdown | Options: `hdfc`, `kotak`. Selecting a bank auto-populates the account details. |
+| `bank_company` | `VARCHAR(150)` | Text Input | Default: `"ACHME COMMUNICATION"`. |
+| `bank_name` | `VARCHAR(100)` | Text Input | Default: `"HDFC BANK"` / `"KOTAK MAHINDRA BANK"`. |
+| `bank_account` | `VARCHAR(50)` | Text Input | Default: `"00312320005822"`. |
+| `bank_ifsc` | `VARCHAR(50)` | Text Input (Uppercase)| Default: `"HDFC0000031"`. |
+| `bank_branch` | `VARCHAR(100)` | Text Input | Default: `"Coimbatore"`. |
+
+---
+
+### 3.8 Attached Media / Image Uploads
+- Allows attaching up to **3 reference images / technical diagrams**.
+- **Client-side Processing**: File is intercepted via HTML file input, processed using HTML5 `<canvas>`, downscaled if exceeding 1200px dimension, and compressed to JPEG quality `0.75` base64 string.
+- Stored directly in the quotation JSON structure inside `terms_separate_orders.attached_images`.
+
+---
+
+## 4. Mathematical & Business Calculation Engine
+
+### 4.1 Geographic GST Routing (Intra-state vs Inter-state)
+
+The system compares the supplier's state against the client's state to determine whether tax is split into CGST + SGST (Intra-state) or levied as IGST (Inter-state).
+
+1. **Supplier State Resolution**:
+   - `Coimbatore` $\rightarrow$ `Tamil Nadu`
+   - `Chennai` $\rightarrow$ `Tamil Nadu`
+   - `Bangalore` $\rightarrow$ `Karnataka`
+2. **Client State Resolution**: `client_state` (normalized to lowercase, trimmed).
+3. **Routing Formula**:
+   $$\text{isSameState} = (\text{Supplier State} == \text{Client State}) \land (\text{Client State} \neq \text{""})$$
+   - If $\text{isSameState} = \text{true}$:
+     $$\text{CGST Rate} = \frac{T_i}{2}, \quad \text{SGST Rate} = \frac{T_i}{2}, \quad \text{IGST Rate} = 0$$
+   - If $\text{isSameState} = \text{false}$:
+     $$\text{CGST Rate} = 0, \quad \text{SGST Rate} = 0, \quad \text{IGST Rate} = T_i$$
+
+---
+
+### 4.2 Multi-Mode GST Calculations
+
+For each item $i$:
 - $P_i$ = Unit Price
 - $Q_i$ = Quantity
-- $D_i$ = Item Discount Amount (flat deduction)
-- $T_i$ = Item GST Percentage (e.g., 18% as `18`)
-- $A_i$ = Item Base Amount before discount = $P_i \times Q_i$
-- $M_i$ = Discounted Amount = $A_i - D_i$
+- $D_i$ = Discount Amount (flat ₹ deduction)
+- $T_i$ = Item GST Percentage (e.g. $18$)
+- $\text{Base}_i = P_i \times Q_i$
+- $\text{Net Base}_i = \text{Base}_i - D_i$
 
-#### Mode A: GST Exclusive (GST added on top of price)
-$$\text{Taxable Value}_i = M_i$$
+#### Mode 1: Exclusive Mode (GST added on top of entered price)
+$$\text{Taxable Value}_i = \text{Net Base}_i$$
 $$\text{Tax Amount}_i = \text{Taxable Value}_i \times \frac{T_i}{100}$$
-$$\text{Line Subtotal}_i = \text{Taxable Value}_i + \text{Tax Amount}_i$$
+$$\text{Line Total}_i = \text{Taxable Value}_i + \text{Tax Amount}_i$$
+$$\text{Grand Total} = \sum \text{Taxable Value}_i + \sum \text{Tax Amount}_i$$
 
-#### Mode B: GST Inclusive (GST extracted out of price)
-$$\text{Taxable Value}_i = \frac{M_i}{1 + \frac{T_i}{100}}$$
-$$\text{Tax Amount}_i = M_i - \text{Taxable Value}_i$$
-$$\text{Line Subtotal}_i = M_i$$
+#### Mode 2: Inclusive Mode (Entered price already includes GST)
+$$\text{Taxable Value}_i = \frac{\text{Net Base}_i}{1 + \frac{T_i}{100}}$$
+$$\text{Tax Amount}_i = \text{Net Base}_i - \text{Taxable Value}_i$$
+$$\text{Line Total}_i = \text{Net Base}_i$$
+$$\text{Grand Total} = \sum \text{Net Base}_i$$
+*(In the summary box, the displayed Subtotal is the back-calculated Taxable Value, with GST shown separately, totaling the exact entered Net Price).*
 
-#### Mode C: GST Exempt (Tax-free)
-$$\text{Taxable Value}_i = M_i$$
+#### Mode 3: Exempt Mode & Tax Extra Mode (No tax computed in totals)
+$$\text{Taxable Value}_i = \text{Net Base}_i$$
 $$\text{Tax Amount}_i = 0$$
-$$\text{Line Subtotal}_i = M_i$$
+$$\text{Line Total}_i = \text{Net Base}_i$$
+$$\text{Grand Total} = \sum \text{Net Base}_i$$
 
 ---
 
-### 3.3 Aggregated Order Totals
-- **Subtotal**: $\sum (P_i \times Q_i)$
-- **Total Discount**: $\sum D_i$
-- **Total CGST**: $\sum (\text{Tax Amount}_i)$ if Same State else $0$ (divided by 2 for CGST and 2 for SGST)
-- **Total SGST**: $\sum (\text{Tax Amount}_i)$ if Same State else $0$ (divided by 2 for CGST and 2 for SGST)
-- **Total IGST**: $\sum (\text{Tax Amount}_i)$ if Different State else $0$
-- **Total Tax**: $\text{Total CGST} + \text{Total SGST} + \text{Total IGST}$
-- **Grand Total**:
-  - Exclusive Mode: $\text{Subtotal} - \text{Total Discount} + \text{Total Tax}$
-  - Inclusive Mode: $\text{Subtotal} - \text{Total Discount}$
-  - Exempt Mode: $\text{Subtotal} - \text{Total Discount}$
+### 4.3 Multi-Tax Rate Aggregation & Grouping
+
+When a quotation contains items with different tax rates (e.g. Item 1 at 18%, Item 2 at 28%, Item 3 at 5%):
+1. The engine buckets taxable amounts by tax rate:
+   $$\text{Bucket}(T) = \sum_{i \in \text{Items with rate } T} \text{Tax Amount}_i$$
+2. In the Summary Box, the engine outputs separate breakdown rows sorted by tax rate descending:
+   - Intra-state: Outputs `CGST (T/2)%` and `SGST (T/2)%` for each distinct rate.
+   - Inter-state: Outputs `IGST T%` for each distinct rate.
+3. If `hide_gst_percentage` is toggled on, rate labels are stripped (outputting consolidated `CGST`, `SGST`, `IGST`).
 
 ---
 
-## 4. Version Control & Revision History Logic
-To maintain strict auditability, editing a quotation does **not** update the existing row directly. Instead, follow this exact workflow in the SQL transaction:
+### 4.4 Currency to Indian Rupee Words Conversion
 
-1. **Transaction Start**: Begin MySQL database transaction.
-2. **Customer Sync**: Update the linked customer details in the `customers` table based on the customer ID of the active quotation.
-3. **Retrieve Ancestor Data**: Query the existing quotation:
+The system formats `grand_total` into official Indian Numbering words (Lakhs, Crores):
+- Rule: $10,000,000 \rightarrow \text{"Crore"}$, $100,000 \rightarrow \text{"Lakh"}$, $1,000 \rightarrow \text{"Thousand"}$, $100 \rightarrow \text{"Hundred"}$.
+- Suffix: Always appends `" Rupees Only"`.
+- Example: ₹ 1,84,500.00 $\rightarrow$ *"One Lakh Eighty Four Thousand Five Hundred Rupees Only"*.
+
+---
+
+## 5. Immutable Version Control & Revision History Logic
+
+To preserve compliance and auditing integrity, **editing a quotation never overwrites existing database rows**.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Sales Executive / Admin
+    participant UI as React UI (quotation.jsx)
+    participant API as Express Router (quotationRoutes.js)
+    participant DB as MySQL Database
+
+    User->>UI: Modifies items/prices & clicks "Update Quotation"
+    UI->>API: PUT /api/quotations/:id with updated payload
+    Note over API: Start SQL Transaction
+    API->>DB: UPDATE customers SET customer_name, mobile, email, gst...
+    API->>DB: SELECT customer_id, parent_id, version, reference_no, status FROM quotations WHERE id = :id
+    DB-->>API: Returns current record (e.g. id=10, parent_id=NULL, version=1)
+    Note over API: Resolve rootId = parent_id || id (rootId = 10)<br/>Query MAX(version) where id=10 OR parent_id=10 (e.g. maxVersion=1)<br/>newVersion = maxVersion + 1 (newVersion = 2)
+    API->>DB: UPDATE quotations SET is_latest = 0 WHERE id = 10 OR parent_id = 10
+    API->>DB: INSERT INTO quotations (customer_id, parent_id=10, version=2, is_latest=1, reference_no='QT-2026-004'...)
+    DB-->>API: Returns newId = 25
+    API->>DB: INSERT INTO quotation_items (quotation_id=25, product_number, description, price...)
+    API->>DB: COMMIT Transaction
+    API-->>UI: { message: "New version saved", newId: 25, version: 2 }
+    UI->>User: Displays confirmation "Version 2 saved" & refreshes list
+```
+
+### Key Versioning Rules:
+- The active quote in the main quotation list is always the row where `is_latest = 1`.
+- Historical versions remain in the database with `is_latest = 0`.
+- Calling `GET /api/quotations/customer-history/:id` queries the entire lineage tree (`parent_id = rootId OR id = rootId`) and returns all historical revisions ordered by version number.
+- Older versions can be viewed or printed in exact historical state, but cannot overwrite the tree.
+
+---
+
+## 6. Quotation Lifecycle & Automated Target Synchronization
+
+### Status States:
+1. `Send`: Proposal dispatched to client.
+2. `Pending`: Under review / awaiting customer confirmation (Default).
+3. `Close`: Deal lost or closed without order.
+4. `Billed`: Order confirmed and converted into active business.
+5. `Cancel`: Quotation voided.
+
+### Automated Sales Target Synchronization (`handleQuotationTargetSync`)
+When a quotation's status transitions:
+
+```mermaid
+flowchart TD
+    A[Quotation Status Updated] --> B{Did Status Change?}
+    B -->|No| C[Exit - No Action]
+    B -->|Yes| D{Is New Status 'Billed'?}
+    
+    D -->|Yes| E[Credit Target Amount: +grand_total]
+    D -->|No, Old was 'Billed'| F[Reverse Target Amount: -grand_total]
+    D -->|Neither was 'Billed'| C
+    
+    E --> G[Lookup Sales Rep in 'task_targets']
+    F --> G
+    
+    G --> H[INSERT log into 'task_updates']
+    H --> I[UPSERT into 'task_achievements' for Current Month]
+    I --> J[Compute Total Achieved vs Monthly Target %]
+    
+    J --> K{Percentage >= 100%?}
+    K -->|Yes| L[Insert 'target_completed' High Priority Notification]
+    K -->|No| M[Insert 'target_achievement' Notification]
+    
+    L --> N[Emit WebSocket 'target_completed' celebratory broadcast to Admins]
+    M --> O[Emit WebSocket 'data_changed' event]
+```
+
+---
+
+## 7. Document Rendering & PDF Generation Logic
+
+The quotation template engine (`invoicetemplate.jsx` and `generateInvoicePdf.js`) enforces strict A4 print formatting rules:
+
+1. **Header Section**:
+   - Company logo displayed top-left (`achme logo`).
+   - Uppercase document title (`QUOTATION` / `PROPOSAL`).
+   - Document ID Badge: Doc No (`QT-YYYY-XXX`) and Date (`DD MMM YYYY`).
+2. **Top Grid (From & Billed To)**:
+   - 2-column equal-height card layout (`.ft-top-boxes`).
+   - Supplier card displays branch address, GSTIN, and branch phone numbers.
+   - Client card displays Company Name (bold), Contact Person Name, GSTIN, combined address, phone (`+91` prefixed), and email.
+3. **Items Table**:
+   - Headers: `S.NO`, `BRAND`, `DESCRIPTION`, `HSN/SAC`, `QTY`, `UNIT PRICE`, `UOM`, `GST%`, `TOTAL VALUE`.
+   - **Dynamic Column Hiding**: If no item in the list has a `brand_model`, the `BRAND` column is omitted entirely. If no item has `hsn_sac`, the `HSN/SAC` column is omitted.
+4. **Mid-Section 2×2 Grid**:
+   - **Top Left**: Terms & Conditions card (auto-generates clauses from T&C toggles).
+   - **Top Right**: Summary card (Subtotal, Discount, CGST/SGST/IGST breakdown, Grand Total, and italicized Amount in Words).
+   - **Bottom Left**: Important Notes card (Standard project exclusions, BoQ variation, and civil work exclusions).
+   - **Bottom Right**: Bank Details card (Company, Bank Name, Account Number, IFSC, Branch).
+5. **Image Attachments Gallery**:
+   - Rendered below the mid-section if 1, 2, or 3 images are attached.
+   - 1 Image: Full-width centered container.
+   - 2 Images: 2-column side-by-side grid.
+   - 3 Images: 1 large top banner + 2 bottom split images.
+6. **Bottom Pinned Footer**:
+   - Executive Bar: Pinned horizontal bar showing `Executive Name | PH | Email`.
+   - Our Branches Box: Lists other branch locations and GSTIN numbers (automatically filters out the current supplying branch to avoid redundancy).
+7. **Puppeteer Multi-page Print Engine**:
+   - Uses Chrome in headless mode with `@page { size: A4 portrait; margin: 8mm 8mm 12mm 8mm; }`.
+   - Applies `page-break-inside: avoid; break-inside: avoid;` on all cards, table rows, and bank boxes to prevent awkward mid-card page splits.
+
+---
+
+## 8. Security, Authentication & Role-Based Access Control (RBAC)
+
+All Quotation API routes require a verified JWT Bearer Token (`verifyToken` middleware).
+
+### Role Permissions Matrix:
+
+| Action | Admin | Subadmin | Employee |
+| :--- | :---: | :---: | :---: |
+| **View All Quotations** | Yes | Yes | No (Only quotations created by self or shared via `client_shares`) |
+| **Create Quotation** | Yes | Yes | Yes |
+| **Edit / Revise Quotation** | Yes | Yes | Yes (Only quotes created by self) |
+| **Change Status** | Yes | Yes | Yes (Only quotes created by self) |
+| **Delete Quotation / Version** | Yes | No | No (Admin only) |
+| **Send Email via SMTP** | Yes | Yes | Yes (Dispatched via employee's configured SMTP) |
+| **Download PDF** | Yes | Yes | Yes |
+
+### Client-Sharing Data Access for Employees:
+Employees can access quotations if:
+1. `q.created_by = req.user.id`, OR
+2. The quotation's customer is linked to a client record shared with the employee via the `client_shares` table:
    ```sql
-   SELECT customer_id, parent_id, version, reference_no FROM quotations WHERE id = ?;
+   q.customer_id IN (
+     SELECT cust.id FROM customers cust
+     JOIN clients cl ON (cl.phone = cust.mobile_number OR cl.email = cust.email)
+     WHERE cl.id IN (
+       SELECT client_id FROM client_shares
+       WHERE shared_to IN (SELECT id FROM teammember WHERE user_id = ?)
+     )
+   )
    ```
-4. **Determine Revision Details**:
-   - Let `rootId` be: `parent_id` (if it is not null) or `id` (if `parent_id` is null). This resolves to the original parent quotation.
-   - Let `newVersion` be: `version + 1`.
-   - Keep the original `reference_no` (e.g. `QT-2026-004`).
-5. **Mark Outdated**: Update all historical versions belonging to this tree to be non-latest:
-   ```sql
-   UPDATE quotations SET is_latest = 0 WHERE id = ? OR parent_id = ?;
-   ```
-6. **Insert New Version**: Insert a new record into the `quotations` table with:
-   - `parent_id = rootId`
-   - `version = newVersion`
-   - `is_latest = 1`
-   - `reference_no` = original reference number
-   - All other input fields (new prices, terms, branch configuration) set from request body.
-7. **Insert New Items**: Insert all item rows into `quotation_items` linked to the newly generated `quotation_id`.
-8. **Transaction Commit**: Save changes. Returning the new ID and version to the UI client.
 
 ---
 
-## 5. Backend REST API Contracts
+## 9. REST API Contracts & Endpoints
 
-All endpoints must verify the user's JWT bearer token (verify token middleware). Employees can only access quotations they created. Admins and subadmins can access all records.
-
-### 5.1 Fetch Active Quotations
-- **Endpoint**: `GET /api/quotations`
-- **Controller Logic**: Fetch all quotations where `is_latest = 1`. If caller role is `employee`, append `AND created_by = ?`.
-- **Query**:
-  ```sql
-  SELECT q.id, q.quotation_date AS invoice_date, q.grand_total, q.reference_no,
-         q.version, q.is_latest, q.parent_id, q.status,
-         c.customer_name, c.mobile_number, c.email,
-         COALESCE(c.location_city, q.client_city) AS location_city,
-         MIN(qi.description) AS description
-  FROM quotations q
-  JOIN customers c ON c.id = q.customer_id
-  LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
-  WHERE q.is_latest = 1
-  -- [Optional employee filter: AND q.created_by = ?]
-  GROUP BY q.id
-  ORDER BY q.id DESC
-  ```
-
-### 5.2 Fetch Revision History
-- **Endpoint**: `GET /api/quotations/customer-history/:id`
-- **Controller Logic**: Retrieve all historical (non-latest) versions of a quotation.
-- **Query**:
-  ```sql
-  SELECT q.id, q.quotation_date AS invoice_date, q.grand_total, q.reference_no,
-         q.version, q.is_latest, q.parent_id,
-         c.customer_name, c.mobile_number, c.email,
-         COALESCE(q.client_city, c.location_city) AS location_city
-  FROM quotations q
-  JOIN customers c ON c.id = q.customer_id
-  WHERE q.is_latest = 0
-    AND (
-      q.parent_id = ?
-      OR q.id = (SELECT parent_id FROM quotations WHERE id = ?)
-      OR q.parent_id = (SELECT parent_id FROM quotations WHERE id = ? AND parent_id IS NOT NULL)
-    )
-  ORDER BY q.version DESC, q.id DESC
-  ```
-
-### 5.3 Fetch Quotation Details (With Items)
-- **Endpoint**: `GET /api/quotations/:id`
-- **Response Shape**: A flat list of rows containing outer quotation details combined with item data.
-- **Query**:
-  ```sql
-  SELECT q.id AS quotation_id, q.quotation_date AS invoice_date, ...[All columns from quotations],
-         c.customer_name, c.mobile_number, c.email, c.gst_number, c.location_city,
-         qi.product_number, qi.description, qi.brand_model, qi.uom, qi.price,
-         qi.quantity, qi.tax, qi.discount, qi.subtotal AS item_subtotal, qi.hsn_sac
-  FROM quotations q
-  JOIN customers c ON c.id = q.customer_id
-  JOIN quotation_items qi ON qi.quotation_id = q.id
-  LEFT JOIN pi_from_addresses fa ON fa.id = q.from_address_id
-  WHERE q.id = ?
-  ```
-
-### 5.4 Create Quotation
-- **Endpoint**: `POST /api/quotations/create`
-- **Payload Structure**:
-  ```json
-  {
-    "customer": {
-      "customer_name": "Mr. John Doe",
-      "mobile_number": "9876543210",
-      "email": "john@example.com",
-      "gst_number": "33AAHFA7876M1ZX",
-      "location_city": "Coimbatore"
-    },
-    "quotation": {
-      "quotation_date": "2026-06-13",
-      "subtotal": 1000.00,
-      "total_tax": 180.00,
-      "total_cgst": 90.00,
-      "total_sgst": 90.00,
-      "total_igst": 0.00,
-      "total_discount": 0.00,
-      "grand_total": 1180.00
-    },
-    "items": [
-      {
-        "description": "Premium CCTV Camera Setup",
-        "brand_model": "Hikvision 4MP",
-        "hsn_sac": "8525",
-        "uom": "Nos",
-        "price": 1000.00,
-        "quantity": 1,
-        "tax": 18.00,
-        "discount": 0.00,
-        "subtotal": 1180.00
-      }
-    ],
-    "extra": {
-      "client_company": "Doe Industries",
-      "client_address1": "123 Main St",
-      "client_address2": "Peelamedu",
-      "client_city": "Coimbatore",
-      "client_state": "Tamil Nadu",
-      "client_pincode": "641004",
-      "client_country": "India",
-      "supplier_branch": "Coimbatore",
-      "gst_mode": "Exclusive",
-      "exec_name": "Sales Person",
-      "exec_phone": "9999999999",
-      "exec_email": "sales@achme.com",
-      "terms_general": true,
-      "terms_tax": false,
-      "terms_project_period": "15 days",
-      "terms_validity": "30 days",
-      "terms_separate_orders": {"material": false, "installation": false, "usd": false, "boq": false},
-      "terms_payment": "100% Advance",
-      "terms_warranty": "12 Months",
-      "bank_details_id": "hdfc",
-      "bank_company": "ACHME COMMUNICATION",
-      "bank_name": "HDFC BANK",
-      "bank_account": "00312320005822",
-      "bank_ifsc": "HDFC0000031",
-      "bank_branch": "Coimbatore"
-    }
-  }
-  ```
-- **Sync Logic**:
-  1. Check if a client exists in `clients` by `phone`.
-  2. If client does not exist, run `INSERT INTO clients`.
-  3. If client exists, run `UPDATE clients` to synchronize fields.
-  4. Generate a unique reference number: `QT-[Date]-[Random4Digits]`.
-  5. Run MySQL `START TRANSACTION`. Insert into `customers`, then insert into `quotations`, then batch insert into `quotation_items`. Commit.
-
-### 5.5 Update/Revise Quotation
-- **Endpoint**: `PUT /api/quotations/:id`
-- **Payload**: Same as create quotation.
-- **Controller Logic**: Implements the immutable Version Control flow described in Section 4.
-
-### 5.6 Patch Status
-- **Endpoint**: `PATCH /api/quotations/:id`
-- **Payload**: `{ "status": "Send" }`
-- **Access Check**: Requires caller to be an admin/subadmin, or the creator of the quotation.
-
-### 5.7 Delete Quotation
-- **Endpoint**: `DELETE /api/quotations/:id`
-- **Access Check**: Admin role only.
-- **Behavior**: Atomically deletes records in `quotation_items` (linked by foreign key cascade) and the parent row in `quotations`.
-
-### 5.8 Send Email
-- **Endpoint**: `POST /api/quotations/send-email/:id`
-- **Payload**: `{ "to": "client@example.com", "cc": "admin@achme.com", "subject": "Proposal", "body": "Hello..." }`
-- **Logic**: Fetch SMTP credentials for the logged-in user or branch. Create a PDF attachment of the quotation (or inline HTML content) and send the mail via Nodemailer.
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/quotations` | Authenticated | Fetches all active latest quotations (`is_latest = 1`). Filtered by employee role if applicable. |
+| `GET` | `/api/quotations/:id` | Authenticated | Fetches full quotation details including joined line items, customer profile, and branch info. |
+| `GET` | `/api/quotations/customer-history/:id` | Authenticated | Fetches all revision history rows belonging to the quotation's version tree. |
+| `POST`| `/api/quotations/create` | Authenticated | Creates a new customer (if needed), clients sync, and parent quotation with line items. |
+| `PUT` | `/api/quotations/:id` | Authenticated | Creates a new immutable revision (`version + 1`), sets prior versions `is_latest = 0`. |
+| `PATCH`| `/api/quotations/:id` | Authenticated | Updates quotation status (`Pending`, `Send`, `Billed`, etc.) and triggers target sync. |
+| `DELETE`| `/api/quotations/:id` | **Admin Only** | Deletes a quotation and cascades delete to `quotation_items`. |
+| `GET` | `/api/quotations/download-pdf/:id` | Authenticated | Streams a dynamically generated Puppeteer A4 PDF. |
+| `POST`| `/api/quotations/send-email/:id` | Authenticated | Sends quotation email with PDF attachment using the user's SMTP credentials. |
+| `GET` | `/api/quotations/from-addresses` | Authenticated | Lists all saved custom office/warehouse sender addresses. |
+| `POST`| `/api/quotations/from-addresses` | Authenticated | Creates a new custom sender address. |
+| `DELETE`| `/api/quotations/from-addresses/:id` | **Admin Only** | Deletes a sender address. |
 
 ---
-
-## 6. Frontend UI State & Forms
-
-### 6.1 State Architecture
-The React form relies on four core state structures:
-- `customer`: Name, salutation, phone, email, GSTIN, city.
-- `quotationData`: Date of the quotation.
-- `items`: An array of object structures:
-  `{ name, brand_model, hsn_sac, uom, price, qty, tax, discount }`
-- `extra`: Configuration options like branch, bank, terms, billing addresses, and executive contact details.
-
-### 6.2 Item List Actions
-- **Add Item**: Check if `descInput` is present. Create a new object in `items` array with default properties. Clear inputs.
-- **Edit Item**: Select an item by index, populate it back into input fields (`descInput`, `brandInput`), modify it, and save the updated array index.
-- **Remove Item**: Delete item at index, adjust editing indices accordingly.
-- **Totals Calculation Hook**: Run a React utility calculation (or client-side JS formula matching Section 3.3) on every key-stroke change to `price`, `qty`, `tax`, or `discount` in the items list, updating the totals dashboard instantly.
-
----
-
-## 7. Document Template (InvoiceTemplate) Render Rules
-
-The output page must render a highly polished, printable A4 document template. Follow these specific HTML structures and styles to ensure PDF and print alignment:
-
-### 7.1 Header Section
-1. **Logo & Company Info**: Left-aligned company logo (`logo.svg` or brand text) next to the resolved sender address:
-   - Dynamic branch address (based on `supplier_branch` or custom address in database).
-   - Display Supplier GSTIN.
-2. **Title**: Centered large uppercase heading: **PROPOSAL** or **QUOTATION**.
-3. **Metadata Grid**: A two-column grid displaying:
-   - **Quotation Details**: Quotation No (`reference_no`), Version ID, Date, Validity, Sales Executive Name, and email.
-   - **Customer Details**: Billing Company Name, Client Address, Pincode, Client State, Client Contact, and Client GSTIN.
-
-### 7.2 Items Table
-Render a bordered HTML table with the following columns:
-1. **S.No**: Sequenced item number.
-2. **Description of Goods**: Detailed product name and description, including model or brand details.
-3. **HSN/SAC**: Code for the product/service category.
-4. **Qty**: Quantity formatted.
-5. **UOM**: Unit of measurement (e.g. Nos, Sets).
-6. **Rate**: Price per unit.
-7. **Discount**: Item discount amount.
-8. **Taxable Value**: Computed base value (Rate $\times$ Qty - Discount).
-9. **GST Rate**: Percentage (e.g., 18%).
-10. **Tax Amount**: Calculated tax.
-11. **Total Amount**: Final subtotal for the line item.
-
-### 7.3 Bottom Tax & Terms Section
-1. **Tax Breakdown Grid**:
-   - If Same State: Display CGST and SGST with rates and split totals.
-   - If Different State: Display IGST with rate and total.
-2. **Total in Words**: Convert the `grand_total` variable into Indian Rupee words (e.g., *Rupees One Thousand One Hundred and Eighty Only*).
-3. **Terms and Conditions**: Render bulleted list based on toggle variables:
-   - **General Terms**: "Prices are based on current market rates..."
-   - **Tax Terms**: "Tax rates are applicable as per government directives..."
-   - **Project Period**: "Delivery and installation will be completed within [project_period]."
-   - **Validity**: "This quotation is valid for [validity] days."
-   - **Payment Terms**: "Payment mode: [payment]."
-   - **Warranty**: "Products are covered by a [warranty] warranty period."
-   - **Custom Terms**: Plaintext area with user-supplied custom remarks.
-4. **Bank Details Block**: Card-styled display of Bank Name, Account Name, Account Number, Branch Location, and IFSC code.
-5. **Authorized Signatory**: Right-aligned empty space with "For ACHME COMMUNICATION" and a placeholder line for signature.
-
----
-*End of Specification Document. Pass this directly to your AI builder to implement the fully functioning CRM Quotation Module.*
+*Document generated for ACHME CRM engineering specification and business logic implementation.*

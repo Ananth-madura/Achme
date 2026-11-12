@@ -164,6 +164,7 @@ const CALL_TYPE_OPTIONS = [
   "Warranty",
   "New Installation",
   "Repeated",
+  "Service call",
   "Delivery Calls",
   "Project Work",
 ];
@@ -422,15 +423,15 @@ const SearchableSelect = ({
   );
 };
 
-const FormField = ({ label, children, className, required, icon }) => (
+const FormField = ({ label, children, className, required, icon: Icon }) => (
   <div className={className || ""}>
     {label && (
       <label
         className="flex items-center gap-1.5 text-xs font-medium"
         style={{ color: "var(--color-slate, #5d5b54)", marginBottom: "6px" }}
       >
-        {icon && (
-          <icon size={14} style={{ color: "var(--color-primary, #5645d4)" }} />
+        {Icon && (
+          <Icon size={14} style={{ color: "var(--color-primary, #5645d4)" }} />
         )}
         {label}
         {required && (
@@ -916,6 +917,34 @@ const DetailModal = ({ call, onClose, formatCurrency }) => {
                     : "0 km"
                 }
               />
+              {(call.start_point || call.destination || call.via_points) && (
+                <div className="col-span-2 flex items-start gap-3 p-3 rounded-xl border bg-emerald-50 border-emerald-200">
+                  <MapPin size={15} className="mt-0.5 text-emerald-600" />
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+                      Travel Route
+                    </p>
+                    <p className="text-sm font-semibold text-emerald-800 mt-0.5">
+                      {call.start_point || "—"}
+                      {(() => {
+                        let pts = [];
+                        if (call.via_points) {
+                          if (Array.isArray(call.via_points)) pts = call.via_points;
+                          else { try { const a = JSON.parse(call.via_points); if (Array.isArray(a)) pts = a; } catch { pts = call.via_points.split("|").filter(Boolean); } }
+                        }
+                        return pts.length > 0 ? (
+                          <span className="text-emerald-600">
+                            {" → "}{pts.join(" → ")}
+                          </span>
+                        ) : null;
+                      })()}
+                      {call.destination && (
+                        <span className="text-emerald-800"> → {call.destination}</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1336,6 +1365,9 @@ const CallReport = () => {
     end_time: "",
     travel_start_time: "",
     travel_reach_time: "",
+    start_point: "",
+    destination: "",
+    via_points: [],
     km: "",
     start_km: "",
     end_km: "",
@@ -1763,6 +1795,9 @@ const CallReport = () => {
       end_time: "",
       travel_start_time: "",
       travel_reach_time: "",
+      start_point: "",
+      destination: "",
+      via_points: [],
       km: "",
       duration: "",
       petrol_charges: "",
@@ -1830,12 +1865,21 @@ const CallReport = () => {
       report_date: toLocalDateISO(call.report_date || call.created_at) || getLocalToday(),
       scheduled_time: call.scheduled_time || "",
     });
+    const parseViaPoints = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      try { const arr = JSON.parse(val); return Array.isArray(arr) ? arr : []; } catch {}
+      return val.split("|").filter(Boolean);
+    };
     setStep2Form({
       engineer: call.engineer || call.staff_name || "",
       start_time: call.start_time || "",
       end_time: call.end_time || "",
       travel_start_time: call.travel_start_time || "",
       travel_reach_time: call.travel_reach_time || "",
+      start_point: call.start_point || "",
+      destination: call.destination || "",
+      via_points: parseViaPoints(call.via_points),
       km: call.km || "",
       start_km: call.start_km || "",
       end_km: call.end_km || "",
@@ -1868,12 +1912,21 @@ const CallReport = () => {
             ? "2hr"
             : "";
     const gt0 = (v) => (parseFloat(v) > 0 ? String(v) : "");
+    const parseViaPoints = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      try { const arr = JSON.parse(val); return Array.isArray(arr) ? arr : []; } catch {}
+      return val.split("|").filter(Boolean);
+    };
     setStep2Form({
       engineer: call.engineer || call.staff_name || "",
       start_time: call.start_time || "",
       end_time: call.end_time || "",
       travel_start_time: call.travel_start_time || "",
       travel_reach_time: call.travel_reach_time || "",
+      start_point: call.start_point || "",
+      destination: call.destination || "",
+      via_points: parseViaPoints(call.via_points),
       km: call.km || "",
       start_km: call.start_km || "",
       end_km: call.end_km || "",
@@ -2108,6 +2161,11 @@ const CallReport = () => {
         end_time: step2Form.end_time,
         travel_start_time: step2Form.travel_start_time || null,
         travel_reach_time: step2Form.travel_reach_time || null,
+        start_point: step2Form.start_point || "",
+        destination: step2Form.destination || "",
+        via_points: Array.isArray(step2Form.via_points)
+          ? JSON.stringify(step2Form.via_points.filter(s => s && s.trim()))
+          : (step2Form.via_points || ""),
         km:
           step2Form.km === "" ||
             step2Form.km === null ||
@@ -5846,6 +5904,86 @@ const CallReport = () => {
                           </div>
                         );
                       })()}
+                    </div>
+                  </div>
+                  {/* ── Travel Route Section ── */}
+                  <div className="sm:col-span-2">
+                    <div className="p-3 rounded-xl border border-emerald-200 bg-emerald-50/60">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 mb-3 flex items-center gap-1">
+                        📍 Travel Route
+                      </p>
+                      <div className="grid grid-cols-1 gap-3">
+                        <FormField label="Start Point" icon={MapPin}>
+                          <input
+                            type="text"
+                            value={step2Form.start_point || ""}
+                            onChange={(e) =>
+                              setStep2Form({ ...step2Form, start_point: e.target.value })
+                            }
+                            className={inputBase}
+                            placeholder="e.g. Office, Chennai"
+                            disabled={!canEditDelete}
+                          />
+                        </FormField>
+                        {/* Via Points (dynamic array) */}
+                        {Array.isArray(step2Form.via_points) && step2Form.via_points.map((point, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 border border-emerald-300 rounded-full px-2 py-0.5 whitespace-nowrap">
+                              Via {idx + 1}
+                            </span>
+                            <input
+                              type="text"
+                              value={point}
+                              onChange={(e) => {
+                                const updated = [...step2Form.via_points];
+                                updated[idx] = e.target.value;
+                                setStep2Form({ ...step2Form, via_points: updated });
+                              }}
+                              className={`${inputBase} flex-1`}
+                              placeholder={`Intermediate point ${idx + 1}`}
+                              disabled={!canEditDelete}
+                            />
+                            {canEditDelete && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = step2Form.via_points.filter((_, i) => i !== idx);
+                                  setStep2Form({ ...step2Form, via_points: updated });
+                                }}
+                                className="text-red-400 hover:text-red-600 p-1"
+                                title="Remove point"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {canEditDelete && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const current = Array.isArray(step2Form.via_points) ? step2Form.via_points : [];
+                              setStep2Form({ ...step2Form, via_points: [...current, ""] });
+                            }}
+                            className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 transition mt-1"
+                          >
+                            <Plus size={14} />
+                            Add Via Point
+                          </button>
+                        )}
+                        <FormField label="Destination" icon={MapPin}>
+                          <input
+                            type="text"
+                            value={step2Form.destination || ""}
+                            onChange={(e) =>
+                              setStep2Form({ ...step2Form, destination: e.target.value })
+                            }
+                            className={inputBase}
+                            placeholder="e.g. Client Site, Mumbai"
+                            disabled={!canEditDelete}
+                          />
+                        </FormField>
+                      </div>
                     </div>
                   </div>
                   <div className="col-span-full bg-slate-50 p-3.5 rounded-xl border border-slate-200">

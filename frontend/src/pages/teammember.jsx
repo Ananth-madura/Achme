@@ -4,7 +4,7 @@ import {
   Search, Plus, X, Trash2, Edit, Mail, UserCheck, AlertCircle,
   CheckSquare, Zap, Key, Ban, Unlock, Users, Shield, Phone,
   MapPin, Briefcase, ChevronDown, Star, Eye, EyeOff, RefreshCw,
-  LayoutGrid, List
+  LayoutGrid, List, Lock, CheckCircle
 } from "lucide-react";
 import axios from "axios";
 import { useAuth } from "../auth/AuthContext";
@@ -109,8 +109,12 @@ const Team = () => {
   /* ── Password modal ─────────────────────────────────────── */
   const [pwModalMember, setPwModalMember] = useState(null);
   const [newPassword, setNewPassword]     = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPw, setShowPw]               = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [pwLoading, setPwLoading]         = useState(false);
+  const [pwSuccessMsg, setPwSuccessMsg]   = useState("");
+  const [pwErrorMsg, setPwErrorMsg]       = useState("");
 
   /* ── Form state ─────────────────────────────────────────── */
   const [form, setForm] = useState({
@@ -305,16 +309,50 @@ const Team = () => {
   };
 
   /* ── Password ───────────────────────────────────────────── */
-  const openPwModal = (m) => { setPwModalMember(m); setNewPassword(""); setShowPw(false); setPwModalOpen(true); };
-  const savePassword = async () => {
-    if (!newPassword || newPassword.length < 6) return alert("Password must be ≥ 6 chars");
-    if (!pwModalMember?.user_id) return alert("No user account linked.");
+  const openPwModal = (m) => {
+    setPwModalMember(m);
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowPw(false);
+    setShowConfirmPw(false);
+    setPwSuccessMsg("");
+    setPwErrorMsg("");
+    setPwModalOpen(true);
+  };
+  const savePassword = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setPwErrorMsg("");
+    setPwSuccessMsg("");
+    if (!newPassword || newPassword.length < 6) {
+      setPwErrorMsg("Password must be at least 6 characters long.");
+      return;
+    }
+    if (confirmPassword && newPassword !== confirmPassword) {
+      setPwErrorMsg("Passwords do not match.");
+      return;
+    }
+    const targetId = pwModalMember?.user_id || pwModalMember?.id;
+    if (!targetId) {
+      setPwErrorMsg("No linked user account found for this member.");
+      return;
+    }
     setPwLoading(true);
     try {
-      await axios.post(`${API}/api/auth/reset-password/${pwModalMember.user_id}`, { new_password: newPassword }, cfg());
-      setPwModalOpen(false); setPwModalMember(null); setNewPassword("");
-    } catch (err) { alert("Failed: " + (err.response?.data?.message || err.message)); }
-    finally { setPwLoading(false); }
+      const res = await axios.post(`${API}/api/auth/reset-password/${targetId}`, { new_password: newPassword }, cfg());
+      setPwSuccessMsg(res.data?.message || `Password for ${pwModalMember.first_name || "account"} updated successfully!`);
+      setTimeout(() => {
+        setPwModalOpen(false);
+        setPwModalMember(null);
+        setNewPassword("");
+        setConfirmPassword("");
+        setPwSuccessMsg("");
+        setPwErrorMsg("");
+      }, 1200);
+    } catch (err) {
+      setPwErrorMsg(err.response?.data?.message || err.message || "Failed to update password");
+    } finally {
+      setPwLoading(false);
+    }
   };
 
   /* ── Ban/Unban ──────────────────────────────────────────── */
@@ -389,6 +427,28 @@ const Team = () => {
           <button onClick={fetchTeam} className="p-2 rounded-xl border border-gray-200 bg-white shadow-sm text-gray-500 hover:text-blue-600 hover:border-blue-200 transition" title="Refresh">
             <RefreshCw size={15} className={fetching ? "animate-spin" : ""}/>
           </button>
+          {/* Quick Admin Password button */}
+          {currentUser?.role === "admin" && (
+            <button
+              onClick={() => {
+                const myMember = team.find(m => m.user_id === currentUser?.id || (m.emp_email && currentUser?.email && m.emp_email.toLowerCase() === currentUser.email.toLowerCase())) || {
+                  first_name: currentUser?.name || "Admin",
+                  last_name: "",
+                  emp_email: currentUser?.email || "kk@achmecommunication.com",
+                  user_role: "admin",
+                  user_id: currentUser?.id,
+                  id: currentUser?.id
+                };
+                openPwModal(myMember);
+              }}
+              className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 px-3 py-2 rounded-xl shadow-sm hover:bg-indigo-100 hover:border-indigo-300 transition-all font-semibold text-xs sm:text-sm"
+              title="Change Admin Password"
+            >
+              <Key size={14} className="text-indigo-600"/>
+              <span className="hidden md:inline">Admin Password</span>
+              <span className="md:hidden">Password</span>
+            </button>
+          )}
           {/* Add button */}
           {isAdminOrSubAdmin && (
             <button onClick={() => { resetForm(); setOpen(true); }}
@@ -565,25 +625,32 @@ const Team = () => {
                               </button>
                             </>
                           )}
-                          {currentUser?.role === "admin" && !isPrimary && (
+                          {currentUser?.role === "admin" && (
                             <>
-                              <button onClick={() => openRoleModal(m)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition" title="Change Role">
-                                <Zap size={14}/>
-                              </button>
+                              {!isPrimary && (
+                                <button onClick={() => openRoleModal(m)}
+                                  className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition" title="Change Role">
+                                  <Zap size={14}/>
+                                </button>
+                              )}
                               <button onClick={() => openPwModal(m)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition" title="Change Password">
+                                className="p-1.5 rounded-lg text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 transition font-medium"
+                                title={isPrimary || m.user_role === "admin" ? "Change Admin Password" : "Change Password"}>
                                 <Key size={14}/>
                               </button>
-                              <button onClick={() => handleBan(m)}
-                                className={`p-1.5 rounded-lg transition ${isBanned ? "text-emerald-500 hover:bg-emerald-50" : "text-gray-400 hover:text-orange-500 hover:bg-orange-50"}`}
-                                title={isBanned ? "Unban" : "Ban"}>
-                                {isBanned ? <Unlock size={14}/> : <Ban size={14}/>}
-                              </button>
-                              <button onClick={() => deleteTeamMember(m.id)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
-                                <Trash2 size={14}/>
-                              </button>
+                              {!isPrimary && (
+                                <>
+                                  <button onClick={() => handleBan(m)}
+                                    className={`p-1.5 rounded-lg transition ${isBanned ? "text-emerald-500 hover:bg-emerald-50" : "text-gray-400 hover:text-orange-500 hover:bg-orange-50"}`}
+                                    title={isBanned ? "Unban" : "Ban"}>
+                                    {isBanned ? <Unlock size={14}/> : <Ban size={14}/>}
+                                  </button>
+                                  <button onClick={() => deleteTeamMember(m.id)}
+                                    className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
+                                    <Trash2 size={14}/>
+                                  </button>
+                                </>
+                              )}
                             </>
                           )}
                         </div>
@@ -712,25 +779,32 @@ const Team = () => {
                     </>
                   )}
 
-                  {currentUser?.role === "admin" && !isPrimary && (
+                  {currentUser?.role === "admin" && (
                     <>
-                      <button onClick={() => openRoleModal(m)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition" title="Change Role">
-                        <Zap size={15}/>
-                      </button>
+                      {!isPrimary && (
+                        <button onClick={() => openRoleModal(m)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition" title="Change Role">
+                          <Zap size={15}/>
+                        </button>
+                      )}
                       <button onClick={() => openPwModal(m)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition" title="Change Password">
+                        className="p-1.5 rounded-lg text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 transition font-medium"
+                        title={isPrimary || m.user_role === "admin" ? "Change Admin Password" : "Change Password"}>
                         <Key size={15}/>
                       </button>
-                      <button onClick={() => handleBan(m)}
-                        className={`p-1.5 rounded-lg transition ${isBanned ? "text-emerald-500 hover:bg-emerald-50" : "text-gray-400 hover:text-orange-500 hover:bg-orange-50"}`}
-                        title={isBanned ? "Unban" : "Ban"}>
-                        {isBanned ? <Unlock size={15}/> : <Ban size={15}/>}
-                      </button>
-                      <button onClick={() => deleteTeamMember(m.id)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
-                        <Trash2 size={15}/>
-                      </button>
+                      {!isPrimary && (
+                        <>
+                          <button onClick={() => handleBan(m)}
+                            className={`p-1.5 rounded-lg transition ${isBanned ? "text-emerald-500 hover:bg-emerald-50" : "text-gray-400 hover:text-orange-500 hover:bg-orange-50"}`}
+                            title={isBanned ? "Unban" : "Ban"}>
+                            {isBanned ? <Unlock size={15}/> : <Ban size={15}/>}
+                          </button>
+                          <button onClick={() => deleteTeamMember(m.id)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition" title="Delete">
+                            <Trash2 size={15}/>
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -960,9 +1034,23 @@ const Team = () => {
                   ) : null)}
                 </div>
 
-                <button onClick={() => setViewOpen(false)} className="mt-5 w-full py-2.5 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-                  Close Profile
-                </button>
+                <div className="mt-5 flex gap-2">
+                  {currentUser?.role === "admin" && (
+                    <button
+                      onClick={() => {
+                        const target = viewMember;
+                        setViewOpen(false);
+                        openPwModal(target);
+                      }}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-sm flex items-center justify-center gap-1.5"
+                    >
+                      <Key size={14}/> Change Password
+                    </button>
+                  )}
+                  <button onClick={() => setViewOpen(false)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+                    Close Profile
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1116,48 +1204,130 @@ const Team = () => {
       {/* ══════════════════════════════════════════════════════
           CHANGE PASSWORD MODAL
       ══════════════════════════════════════════════════════ */}
-      {pwModalOpen && pwModalMember && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-gray-100">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2"><Key size={14} className="text-indigo-600"/> Change Password</h3>
-              <button onClick={() => setPwModalOpen(false)} className="text-gray-400 hover:text-red-500 p-1 rounded-lg"><X size={16}/></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                {(() => { const av = getAvatar(`${pwModalMember.first_name} ${pwModalMember.last_name}`); return (
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0"
-                    style={{ background: av.bg + "22", color: av.bg }}>{av.initials}</div>
-                ); })()}
-                <div>
-                  <p className="font-bold text-sm text-gray-800">{pwModalMember.first_name} {pwModalMember.last_name}</p>
-                  <p className="text-[11px] text-gray-400">{pwModalMember.emp_email}</p>
+      {pwModalOpen && pwModalMember && (() => {
+        const isSelf = pwModalMember.user_id === currentUser?.id || 
+                       (pwModalMember.emp_email && currentUser?.email && pwModalMember.emp_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+                       pwModalMember.user_role === "admin";
+        const av = getAvatar(`${pwModalMember.first_name} ${pwModalMember.last_name}`);
+
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={() => setPwModalOpen(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-gray-100 overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Top Banner */}
+              <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-blue-600 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-white">
+                    <Key size={16}/>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold">{isSelf ? "Change Admin Password" : "Change User Password"}</h3>
+                    <p className="text-[11px] text-indigo-100">Dynamic instant password update</p>
+                  </div>
                 </div>
+                <button onClick={() => setPwModalOpen(false)} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"><X size={18}/></button>
               </div>
-              <FI label="New Password" required>
-                <div className="relative">
-                  <input type={showPw ? "text" : "password"} value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)} placeholder="Min. 6 characters"
-                    className={`${inp} pr-10`} autoFocus/>
-                  <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-3 top-3 text-gray-400 hover:text-gray-600">
-                    {showPw ? <EyeOff size={14}/> : <Eye size={14}/>}
+
+              <form onSubmit={savePassword} className="p-6 space-y-4">
+                {/* Member Preview Card */}
+                <div className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm flex-shrink-0"
+                    style={{ background: av.bg + "22", color: av.bg }}>
+                    {av.initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-sm text-gray-800 truncate">{pwModalMember.first_name} {pwModalMember.last_name}</p>
+                      {isSelf && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">You / Admin</span>}
+                    </div>
+                    <p className="text-[11px] text-gray-400 truncate">{pwModalMember.emp_email || "No email"}</p>
+                  </div>
+                  <RoleBadge role={pwModalMember.user_role || "employee"}/>
+                </div>
+
+                {/* Error message */}
+                {pwErrorMsg && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0 text-red-500"/>
+                    <span>{pwErrorMsg}</span>
+                  </div>
+                )}
+
+                {/* Success message */}
+                {pwSuccessMsg && (
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+                    <CheckCircle size={15} className="shrink-0 text-emerald-600"/>
+                    <span>{pwSuccessMsg}</span>
+                  </div>
+                )}
+
+                {/* New Password */}
+                <FI label="New Password" required>
+                  <div className="relative">
+                    <input
+                      type={showPw ? "text" : "password"}
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Enter new password (min. 6 chars)"
+                      className={`${inp} pr-10`}
+                      autoFocus
+                    />
+                    <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-3 top-3 text-gray-400 hover:text-gray-600">
+                      {showPw ? <EyeOff size={15}/> : <Eye size={15}/>}
+                    </button>
+                  </div>
+                </FI>
+
+                {/* Confirm Password */}
+                <FI label="Confirm New Password" required>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPw ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      className={`${inp} pr-10`}
+                    />
+                    <button type="button" onClick={() => setShowConfirmPw(p => !p)} className="absolute right-3 top-3 text-gray-400 hover:text-gray-600">
+                      {showConfirmPw ? <EyeOff size={15}/> : <Eye size={15}/>}
+                    </button>
+                  </div>
+                </FI>
+
+                {/* Notice Note */}
+                <div className={`p-3 rounded-xl text-[11px] leading-relaxed ${isSelf ? "bg-indigo-50 border border-indigo-100 text-indigo-800" : "bg-amber-50 border border-amber-100 text-amber-800"}`}>
+                  {isSelf ? (
+                    <p>
+                      <strong>Note:</strong> You are dynamically updating your own Admin password. The new password will take effect immediately for all your future logins.
+                    </p>
+                  ) : (
+                    <p>
+                      <strong>Notice:</strong> This dynamically updates the employee's login password immediately. Please inform the member after updating.
+                    </p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={pwLoading}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {pwLoading ? <><RefreshCw size={15} className="animate-spin"/> Updating…</> : <><Lock size={15}/> Update Password</>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPwModalOpen(false)}
+                    className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 transition"
+                  >
+                    Cancel
                   </button>
                 </div>
-              </FI>
-              <div className="p-3 bg-amber-50 rounded-xl text-[11px] text-amber-700">
-                ⚠ This immediately changes the employee's login password. Inform them afterwards.
-              </div>
-            </div>
-            <div className="flex gap-3 px-5 pb-5">
-              <button onClick={savePassword} disabled={pwLoading}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition disabled:opacity-50">
-                {pwLoading ? "Updating…" : "Update Password"}
-              </button>
-              <button onClick={() => setPwModalOpen(false)} className="px-5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50">Cancel</button>
+              </form>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

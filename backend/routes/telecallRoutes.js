@@ -83,14 +83,6 @@ const isAuthorizedToEdit = (lead, user) => {
   if (lead.created_by && Number(lead.created_by) === userId) return true;
   if (lead.assigned_to && Number(lead.assigned_to) === userId) return true;
 
-  const userName = (user.name || "").trim().toLowerCase();
-  const staffName = (lead.staff_name || "").trim().toLowerCase();
-  if (userName && staffName && (staffName.includes(userName) || userName.includes(staffName))) return true;
-
-  if (user.role === 'employee') {
-    if (!lead.assigned_to || Number(lead.assigned_to) === userId) return true;
-  }
-
   return false;
 };
 
@@ -108,8 +100,8 @@ router.get("/", verifyToken, (req, res) => {
   const params = [];
 
   if (role === "employee") {
-    sql += " WHERE (t.created_by = ? OR t.assigned_to = ? OR t.assigned_to IS NULL OR (t.staff_name IS NOT NULL AND t.staff_name != '' AND LOWER(t.staff_name) LIKE LOWER(?)))";
-    params.push(user_id, user_id, `%${user_name || ''}%`);
+    sql += " WHERE (t.created_by = ? OR t.assigned_to = ?)";
+    params.push(user_id, user_id);
     sql += " ORDER BY t.id DESC";
     db.query(sql, params, (err, results) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -249,7 +241,16 @@ router.post("/", verifyToken, (req, res) => {
     }
 
     resolveAssignedTo(staff_name, (resolvedId) => {
-      const finalAssignedTo = resolvedId || req.body.assigned_to || null;
+      let finalAssignedTo = resolvedId || req.body.assigned_to || null;
+      let finalStaffName = staff_name;
+
+      if (req.user.role === "employee") {
+        finalAssignedTo = req.user.id;
+        if (!finalStaffName || !finalStaffName.trim()) {
+          finalStaffName = req.user.name || "Employee";
+        }
+      }
+
       const sql = `
         INSERT INTO telecalls (
           customer_name,
@@ -286,9 +287,9 @@ router.post("/", verifyToken, (req, res) => {
           company_name || null,
           mobile_number,
           location_city,
-          toDateOnly(call_date),
+          toDateOnly(call_date) || toDateOnly(new Date()),
           service_name,
-          staff_name,
+          finalStaffName,
           call_outcome,
           followup_required,
           toDateOnly(followup_date),
@@ -376,7 +377,14 @@ router.put("/:id", verifyToken, (req, res) => {
       }
 
       resolveAssignedTo(staff_name, (resolvedId) => {
-        const finalAssignedTo = resolvedId || req.body.assigned_to || null;
+        let finalAssignedTo = resolvedId || req.body.assigned_to || null;
+        let finalStaffName = staff_name;
+
+        if (req.user.role === "employee") {
+          finalAssignedTo = results[0].assigned_to || req.user.id;
+          finalStaffName = results[0].staff_name || req.user.name || finalStaffName;
+        }
+
         db.query(
           `UPDATE telecalls SET
               customer_name=?,
@@ -409,7 +417,7 @@ router.put("/:id", verifyToken, (req, res) => {
             location_city,
             toDateOnly(call_date),
             service_name,
-            staff_name,
+            finalStaffName,
             call_outcome,
             followup_required,
             toDateOnly(followup_date),

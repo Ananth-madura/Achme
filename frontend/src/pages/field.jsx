@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import "../Styles/tailwind.css";
 import { Search, Plus, X, ChevronDown, Trash2, Edit, FileText, History, Bell, Clock, MessageCircle, Download } from "lucide-react";
 import { exportLeadsToCSV } from "../utils/csvExporter";
@@ -65,6 +65,12 @@ const Fields = () => {
   const [dateTypeFilter, setDateTypeFilter] = useState("lead_date");
   const [missedCounts, setMissedCounts] = useState({});
   const [teamMembers, setTeamMembers] = useState([]);
+
+  const currentEmployeeName = useMemo(() => {
+    const tm = teamMembers.find((t) => Number(t.user_id) === Number(user?.id));
+    if (tm) return `${tm.first_name} ${tm.last_name || ""}`.trim();
+    return user?.name || user?.first_name || "";
+  }, [teamMembers, user]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLead, setHistoryLead] = useState(null);
   const [historyActivity, setHistoryActivity] = useState([]);
@@ -90,7 +96,15 @@ const Fields = () => {
       const token = localStorage.getItem("token");
       const config = { headers: { Authorization: `Bearer ${token}` } };
       const res = await axios.get(`${API}/api/fields`, config);
-      setFields(res.data);
+      let data = res.data;
+      if (!isAdmin && user?.role === "employee" && Array.isArray(data)) {
+        data = data.filter(
+          (item) =>
+            Number(item.created_by) === Number(user?.id) ||
+            Number(item.assigned_to) === Number(user?.id)
+        );
+      }
+      setFields(data);
     } catch (err) { console.error(err); }
   };
 
@@ -251,6 +265,7 @@ const Fields = () => {
 
     const payload = {
       ...form,
+      staff_name: !(isAdmin || user?.role === "subadmin") ? (form.staff_name || currentEmployeeName) : form.staff_name,
       visit_date: form.visit_date || today,
     };
 
@@ -473,7 +488,7 @@ const Fields = () => {
 
           <div className="mt-2">
             <button
-              onClick={() => { setIsEdit(false); setForm({ customer_name: "", company_name: "", mobile_number: "", location_city: "", visit_date: getToday(), purpose: "", staff_name: "", field_outcome: "New", followup_required: "Default", followup_date: getToday(), followup_notes: "", reminder_required: "Default", reminder_date: getToday(), reminder_notes: "", reference: "", email: "", gst_number: "", landline_number: "", alternate_mobile_number: "", reference_by: "", nearest_landmark: "" }); setCustomOutcomeInput(""); setOpen(true); }}
+              onClick={() => { setIsEdit(false); setForm({ customer_name: "", company_name: "", mobile_number: "", location_city: "", visit_date: getToday(), purpose: "", staff_name: !(isAdmin || user?.role === "subadmin") ? currentEmployeeName : "", field_outcome: "New", followup_required: "Default", followup_date: getToday(), followup_notes: "", reminder_required: "Default", reminder_date: getToday(), reminder_notes: "", reference: "", email: "", gst_number: "", landline_number: "", alternate_mobile_number: "", reference_by: "", nearest_landmark: "" }); setCustomOutcomeInput(""); setOpen(true); }}
               className="bg-[#FF3355] text-white w-12 h-12 rounded-full flex justify-center items-center shadow-lg hover:bg-[#e62848] "
               title="Add New Field Visit Lead"
             >
@@ -699,25 +714,35 @@ const Fields = () => {
               <div className="grid grid-cols-4 items-center gap-6">
                 <label htmlFor="" className="text-sm text-gray-600 text-left">Staff Name</label>
                 <div className="col-span-3">
-                  <select name="staff_name" value={form.staff_name} onChange={handleChange}
-                    className="border rounded-md px-3 py-2 outline-none bg-white w-full text-sm">
-                    <option value="">-- Select Staff --</option>
-                    {teamMembers
-                      .filter(
-                        (t) =>
-                          (t.emp_role || "").toLowerCase() !== "engineer" &&
-                          (t.emp_role || "").toLowerCase() !== "eng" &&
-                          !(t.job_title || "").toLowerCase().includes("engineer")
-                      )
-                      .map((t) => {
-                        const fullName = `${t.first_name} ${t.last_name || ""}`.trim();
-                        return (
-                          <option key={t.id} value={fullName}>
-                            {fullName}
-                          </option>
-                        );
-                      })}
-                  </select>
+                  {!(isAdmin || user?.role === "subadmin") ? (
+                    <input
+                      type="text"
+                      value={form.staff_name || currentEmployeeName}
+                      readOnly
+                      disabled
+                      className="border rounded-md px-3 py-2 bg-gray-100 text-gray-700 w-full text-sm cursor-not-allowed"
+                    />
+                  ) : (
+                    <select name="staff_name" value={form.staff_name} onChange={handleChange}
+                      className="border rounded-md px-3 py-2 outline-none bg-white w-full text-sm">
+                      <option value="">-- Select Staff --</option>
+                      {teamMembers
+                        .filter(
+                          (t) =>
+                            (t.emp_role || "").toLowerCase() !== "engineer" &&
+                            (t.emp_role || "").toLowerCase() !== "eng" &&
+                            !(t.job_title || "").toLowerCase().includes("engineer")
+                        )
+                        .map((t) => {
+                          const fullName = `${t.first_name} ${t.last_name || ""}`.trim();
+                          return (
+                            <option key={t.id} value={fullName}>
+                              {fullName}
+                            </option>
+                          );
+                        })}
+                    </select>
+                  )}
                 </div>
               </div>
 

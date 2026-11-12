@@ -1,5 +1,4 @@
-// Updated for RBAC and Creator Attribution
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import "../Styles/tailwind.css";
 import {
   Search,
@@ -172,6 +171,12 @@ const Telecall = () => {
   const [missedCounts, setMissedCounts] = useState({});
   const [teamMembers, setTeamMembers] = useState([]);
 
+  const currentEmployeeName = useMemo(() => {
+    const tm = teamMembers.find((t) => Number(t.user_id) === Number(user?.id));
+    if (tm) return `${tm.first_name} ${tm.last_name || ""}`.trim();
+    return user?.name || user?.first_name || "";
+  }, [teamMembers, user]);
+
   // Quotation prefill modal state
   const [qtPrefill, setQtPrefill] = useState(null);
 
@@ -215,7 +220,15 @@ const Telecall = () => {
       const token = localStorage.getItem("token");
       const config = { headers: { Authorization: `Bearer ${token}` } };
       const res = await axios.get(`${API}/api/Telecalls`, config);
-      setTelecall(res.data);
+      let data = res.data;
+      if (!isAdmin && user?.role === "employee" && Array.isArray(data)) {
+        data = data.filter(
+          (item) =>
+            Number(item.created_by) === Number(user?.id) ||
+            Number(item.assigned_to) === Number(user?.id)
+        );
+      }
+      setTelecall(data);
     } catch (err) {
       console.error(err);
     }
@@ -528,6 +541,7 @@ const Telecall = () => {
 
     const payload = {
       ...form,
+      staff_name: !(isAdmin || user?.role === "subadmin") ? (form.staff_name || currentEmployeeName) : form.staff_name,
       call_date: form.call_date || today,
     };
 
@@ -812,7 +826,7 @@ const Telecall = () => {
                   location_city: "",
                   call_date: getToday(),
                   service_name: "",
-                  staff_name: "",
+                  staff_name: !(isAdmin || user?.role === "subadmin") ? currentEmployeeName : "",
                   call_outcome: "New",
                   followup_required: "Default",
                   followup_date: getToday(),
@@ -1176,29 +1190,39 @@ const Telecall = () => {
                   Assigned Staff
                 </label>
                 <div className="col-span-3">
-                  <select
-                    value={form.staff_name}
-                    onChange={handleChange}
-                    name="staff_name"
-                    className="border rounded-md px-3 py-2 outline-none bg-white w-full text-sm"
-                  >
-                    <option value="">-- Select Staff --</option>
-                    {teamMembers
-                      .filter(
-                        (t) =>
-                          (t.emp_role || "").toLowerCase() !== "engineer" &&
-                          (t.emp_role || "").toLowerCase() !== "eng" &&
-                          !(t.job_title || "").toLowerCase().includes("engineer")
-                      )
-                      .map((t) => {
-                        const fullName = `${t.first_name} ${t.last_name || ""}`.trim();
-                        return (
-                          <option key={t.id} value={fullName}>
-                            {fullName}
-                          </option>
-                        );
-                      })}
-                  </select>
+                  {!(isAdmin || user?.role === "subadmin") ? (
+                    <input
+                      type="text"
+                      value={form.staff_name || currentEmployeeName}
+                      readOnly
+                      disabled
+                      className="border rounded-md px-3 py-2 bg-gray-100 text-gray-700 w-full text-sm cursor-not-allowed"
+                    />
+                  ) : (
+                    <select
+                      value={form.staff_name}
+                      onChange={handleChange}
+                      name="staff_name"
+                      className="border rounded-md px-3 py-2 outline-none bg-white w-full text-sm"
+                    >
+                      <option value="">-- Select Staff --</option>
+                      {teamMembers
+                        .filter(
+                          (t) =>
+                            (t.emp_role || "").toLowerCase() !== "engineer" &&
+                            (t.emp_role || "").toLowerCase() !== "eng" &&
+                            !(t.job_title || "").toLowerCase().includes("engineer")
+                        )
+                        .map((t) => {
+                          const fullName = `${t.first_name} ${t.last_name || ""}`.trim();
+                          return (
+                            <option key={t.id} value={fullName}>
+                              {fullName}
+                            </option>
+                          );
+                        })}
+                    </select>
+                  )}
                 </div>
               </div>
 

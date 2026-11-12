@@ -74,14 +74,6 @@ const isAuthorizedToEdit = (lead, user) => {
   if (lead.created_by && Number(lead.created_by) === userId) return true;
   if (lead.assigned_to && Number(lead.assigned_to) === userId) return true;
 
-  const userName = (user.name || "").trim().toLowerCase();
-  const staffName = (lead.staff_name || "").trim().toLowerCase();
-  if (userName && staffName && (staffName.includes(userName) || userName.includes(staffName))) return true;
-
-  if (user.role === 'employee') {
-    if (!lead.assigned_to || Number(lead.assigned_to) === userId) return true;
-  }
-
   return false;
 };
 
@@ -182,6 +174,12 @@ router.post(["/", "/new"], verifyToken, (req, res) => {
 
     resolveAssignedTo(data.staff_name, (resolvedId) => {
       dbData.assigned_to = resolvedId || data.assigned_to || null;
+      if (req.user.role === "employee") {
+        dbData.assigned_to = req.user.id;
+        if (!dbData.staff_name || !dbData.staff_name.trim()) {
+          dbData.staff_name = req.user.name || "Employee";
+        }
+      }
       db.query("INSERT INTO fields SET ?", dbData, (err, result) => {
         if (err) { console.error(err); return res.status(500).json({ message: "Insert failed", error: err.sqlMessage }); }
         const newId = result.insertId;
@@ -222,6 +220,10 @@ router.put("/:id", verifyToken, (req, res) => {
 
       resolveAssignedTo(data.staff_name, (resolvedId) => {
         data.assigned_to = resolvedId || data.assigned_to || null;
+        if (req.user.role === "employee") {
+          data.assigned_to = results[0].assigned_to || req.user.id;
+          data.staff_name = results[0].staff_name || req.user.name || data.staff_name;
+        }
 
         // Strip fields that do NOT exist in the `fields` table
         const allowedColumns = [
@@ -299,8 +301,8 @@ router.get("/", verifyToken, (req, res) => {
   const params = [];
 
   if (role === "employee") {
-    sql += " WHERE (f.created_by = ? OR f.assigned_to = ? OR f.assigned_to IS NULL OR (f.staff_name IS NOT NULL AND f.staff_name != '' AND LOWER(f.staff_name) LIKE LOWER(?)))";
-    params.push(user_id, user_id, `%${user_name || ''}%`);
+    sql += " WHERE (f.created_by = ? OR f.assigned_to = ?)";
+    params.push(user_id, user_id);
     sql += " ORDER BY f.id DESC";
     db.query(sql, params, (err, results) => {
       if (err) return res.status(500).json({ message: "Fetch failed" });

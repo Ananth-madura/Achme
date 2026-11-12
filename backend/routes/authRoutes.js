@@ -382,25 +382,40 @@ router.delete("/delete-user/:id", verifyToken, isAdminOnly, (req, res) => {
   });
 });
 
-/* ================= ADMIN: RESET PASSWORD ================= */
+/* ================= ADMIN: RESET / CHANGE PASSWORD ================= */
 router.post("/reset-password/:id", verifyToken, isAdmin, (req, res) => {
   const { new_password } = req.body;
-  if (!new_password) return res.status(400).json({ message: "New password required" });
+  if (!new_password || new_password.length < 6) {
+    return res.status(400).json({ message: "New password required (minimum 6 characters)" });
+  }
 
-  db.query(`SELECT email, role FROM users WHERE id = ?`, [req.params.id], (err, rows) => {
-    if (err || !rows || !rows.length) return res.status(404).json({ message: "User not found" });
-    // If resetting the primary admin's password, allow it ONLY if they are doing it themselves
-    if (rows[0].email && rows[0].email.toLowerCase() === "kk@achmecommunication.com") {
-      if (req.user.id !== parseInt(req.params.id)) {
-        return res.status(403).json({ message: "Cannot reset the password of the primary admin account" });
+  const lookupSql = `
+    SELECT u.id, u.email, u.role, u.first_name 
+    FROM users u 
+    LEFT JOIN teammember tm ON tm.user_id = u.id 
+    WHERE u.id = ? OR tm.id = ? OR LOWER(u.email) = (SELECT LOWER(emp_email) FROM teammember WHERE id = ? LIMIT 1)
+    LIMIT 1
+  `;
+
+  db.query(lookupSql, [req.params.id, req.params.id, req.params.id], (err, rows) => {
+    if (err || !rows || !rows.length) {
+      return res.status(404).json({ message: "User account not found" });
+    }
+
+    const targetUser = rows[0];
+
+    // Protect primary admin from non-admins (already guarded by isAdmin middleware)
+    if (targetUser.email && targetUser.email.toLowerCase() === "kk@achmecommunication.com") {
+      if (req.user.role !== "admin") {
+        return res.status(403).json({ message: "Only administrators can change this password" });
       }
     }
 
     bcrypt.hash(new_password, 10, (errHash, hash) => {
-      if (errHash) return res.status(500).json({ message: "Hash failed" });
-      db.query(`UPDATE users SET user_password = ? WHERE id = ?`, [hash, req.params.id], (err2) => {
-        if (err2) return res.status(500).json({ message: "Reset failed" });
-        res.json({ message: "Password reset successfully" });
+      if (errHash) return res.status(500).json({ message: "Password hashing failed" });
+      db.query(`UPDATE users SET user_password = ? WHERE id = ?`, [hash, targetUser.id], (err2) => {
+        if (err2) return res.status(500).json({ message: "Failed to update password in database" });
+        res.json({ success: true, message: `Password for ${targetUser.first_name || targetUser.email} updated successfully`, user_id: targetUser.id });
       });
     });
   });

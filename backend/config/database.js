@@ -138,7 +138,7 @@ async function ensureTablesAndColumns() {
     },
     {
       name: "services",
-      sql: `CREATE TABLE IF NOT EXISTS services (id INT AUTO_INCREMENT PRIMARY KEY, client VARCHAR(150) DEFAULT NULL, material VARCHAR(255) DEFAULT NULL, warranty VARCHAR(100) DEFAULT NULL, amc TINYINT(1) DEFAULT 0, date DATE DEFAULT NULL, images TEXT DEFAULT NULL, issues TEXT DEFAULT NULL, created_by INT DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, engineer_name VARCHAR(150) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+      sql: `CREATE TABLE IF NOT EXISTS services (id INT AUTO_INCREMENT PRIMARY KEY, client VARCHAR(150) DEFAULT NULL, material VARCHAR(255) DEFAULT NULL, warranty VARCHAR(100) DEFAULT NULL, amc TINYINT(1) DEFAULT 0, date DATE DEFAULT NULL, images TEXT DEFAULT NULL, issues TEXT DEFAULT NULL, created_by INT DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, engineer_name VARCHAR(150) DEFAULT NULL, status VARCHAR(20) DEFAULT 'Pending') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
     },
     {
       name: "customers",
@@ -574,6 +574,7 @@ async function ensureTablesAndColumns() {
     { table: "performainvoices", column: "created_by", definition: "created_by INT DEFAULT NULL" },
     { table: "services", column: "created_by", definition: "created_by INT DEFAULT NULL" },
     { table: "services", column: "engineer_name", definition: "engineer_name VARCHAR(150) DEFAULT NULL" },
+    { table: "services", column: "status", definition: "status VARCHAR(20) DEFAULT 'Pending'" },
     { table: "call_reports", column: "created_by", definition: "created_by INT DEFAULT NULL" },
     { table: "call_reports", column: "customer_id", definition: "customer_id INT DEFAULT NULL" },
     { table: "call_reports", column: "name", definition: "name VARCHAR(150) DEFAULT NULL" },
@@ -630,6 +631,9 @@ async function ensureTablesAndColumns() {
     { table: "call_reports", column: "carry_forward_date", definition: "carry_forward_date DATE NULL" },
     { table: "call_reports", column: "travel_start_time", definition: "travel_start_time TIME DEFAULT NULL" },
     { table: "call_reports", column: "travel_reach_time", definition: "travel_reach_time TIME DEFAULT NULL" },
+    { table: "call_reports", column: "start_point", definition: "start_point VARCHAR(255) DEFAULT NULL" },
+    { table: "call_reports", column: "destination", definition: "destination VARCHAR(255) DEFAULT NULL" },
+    { table: "call_reports", column: "via_points", definition: "via_points TEXT DEFAULT NULL" },
     { table: "call_reports", column: "travel_duration", definition: "travel_duration INT DEFAULT NULL" },
     { table: "call_reports", column: "start_km", definition: "start_km DECIMAL(10,2) DEFAULT NULL" },
     { table: "call_reports", column: "end_km", definition: "end_km DECIMAL(10,2) DEFAULT NULL" },
@@ -977,8 +981,9 @@ async function seedDefaultEmployees() {
   try {
     const existingAdmin = await queryAsync(`SELECT id FROM users WHERE email = ?`, [adminUser.email]);
     if (existingAdmin.length > 0) {
-      await queryAsync(`UPDATE users SET first_name=?, last_name=?, emp_id=?, user_password=?, role='admin', status='active' WHERE email=?`,
-        [adminUser.first_name, adminUser.last_name, adminUser.emp_id, adminHash, adminUser.email]);
+      // Do NOT overwrite user_password to avoid resetting updates made in the app
+      await queryAsync(`UPDATE users SET first_name=?, last_name=?, emp_id=?, role='admin', status='active' WHERE email=?`,
+        [adminUser.first_name, adminUser.last_name, adminUser.emp_id, adminUser.email]);
     } else {
       await queryAsync(`INSERT INTO users (first_name, last_name, emp_id, email, user_password, role, status) VALUES (?, ?, ?, ?, ?, 'admin', 'active')`,
         [adminUser.first_name, adminUser.last_name, adminUser.emp_id, adminUser.email, adminHash]);

@@ -73,6 +73,20 @@ router.delete("/:id", verifyToken, isAdmin, (req, res) => {
   });
 });
 
+// TOGGLE SERVICE STATUS (Pending / Closed)
+router.patch("/:id/status", verifyToken, (req, res) => {
+  const { status } = req.body;
+  if (!["Pending", "Closed"].includes(status)) {
+    return res.status(400).json({ message: "Invalid status. Must be Pending or Closed." });
+  }
+  const sql = "UPDATE services SET status = ? WHERE id = ?";
+  db.query(sql, [status, req.params.id], (err, result) => {
+    if (err) return res.status(500).json(err);
+    if (result.affectedRows === 0) return res.status(404).json({ message: "Service not found" });
+    res.json({ message: "Status updated", status });
+  });
+});
+
 // UPDATE SERVICE
 router.put("/:id", upload.array("images", 10), verifyToken, (req, res) => {
   const { client, material, warranty, amc, date, issues, engineer_name } = req.body;

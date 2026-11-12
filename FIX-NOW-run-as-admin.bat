@@ -96,6 +96,21 @@ echo             return 200 "Nginx OK - ACHME CRM\n";
 echo             add_header Content-Type text/plain;
 echo         }
 echo.
+echo         # Priority Uploads Proxy (must use ^^~ to override static regex extension caching)
+echo         location ^^~ /uploads/ {
+echo             proxy_pass http://achme_backend/uploads/;
+echo             proxy_http_version 1.1;
+echo             proxy_set_header Host              $host;
+echo             proxy_set_header X-Real-IP         $remote_addr;
+echo             proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+echo             proxy_set_header X-Forwarded-Proto $scheme;
+echo             proxy_connect_timeout  120s;
+echo             proxy_send_timeout     120s;
+echo             proxy_read_timeout     120s;
+echo             expires 30d;
+echo             add_header Cache-Control "public";
+echo         }
+echo.
 echo         location ~* \.(js^|css^|png^|jpg^|jpeg^|gif^|ico^|svg^|woff^|woff2^|ttf^|eot^)$ {
 echo             expires 1y;
 echo             add_header Cache-Control "public, immutable";

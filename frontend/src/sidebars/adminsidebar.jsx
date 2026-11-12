@@ -69,7 +69,7 @@ const Sidebar = ({ onNavigate, collapsed, onExpand }) => {
       icon: <Wrench size={20} />,
       title: "Services",
       subitems: [
-        { label: "Products", path: "/dashboard/products" },
+        { label: "In-House", path: "/dashboard/products" },
         { label: "Service Estimation", path: "/dashboard/serviceestimation" },
         { label: "Call Report", path: "/dashboard/call-report" },
       ]
@@ -89,7 +89,7 @@ const Sidebar = ({ onNavigate, collapsed, onExpand }) => {
       icon: <Wrench size={20} />,
       title: "Services",
       subitems: [
-        { label: "Products", path: "/dashboard/products" },
+        { label: "In-House", path: "/dashboard/products" },
         { label: "Call Report", path: "/dashboard/call-report" }
       ]
     }
